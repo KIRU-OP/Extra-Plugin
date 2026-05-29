@@ -1,43 +1,48 @@
 import os
-import aiohttp
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from VIPMUSIC import app
+from VIPMUSIC.core.userbot import assistants  # ya jo bhi tumhara userbot import hai
 
 
-async def upload_to_telegraph(file_path: str) -> str:
-    async with aiohttp.ClientSession() as session:
-        with open(file_path, "rb") as f:
-            data = aiohttp.FormData()
-            data.add_field(
-                "file",
-                f,
-                filename=os.path.basename(file_path),
-                content_type="image/jpeg",
-            )
-            async with session.post("https://telegra.ph/upload", data=data) as resp:
-                result = await resp.json()
-                if isinstance(result, list) and result and "src" in result[0]:
-                    return "https://telegra.ph" + result[0]["src"]
-                raise Exception(f"Telegraph response error: {result}")
+# Apna ek PUBLIC channel banao aur uska ID yahan daalo
+STORAGE_CHANNEL = -1003884346368  # 👈 Apne channel ka ID daalo
 
 
-async def upload_to_catbox(file_path: str) -> str:
-    async with aiohttp.ClientSession() as session:
-        with open(file_path, "rb") as f:
-            data = aiohttp.FormData()
-            data.add_field("reqtype", "fileupload")
-            data.add_field("userhash", "")
-            data.add_field(
-                "fileToUpload",
-                f,
-                filename=os.path.basename(file_path),
-            )
-            async with session.post("https://catbox.moe/user/api.php", data=data) as resp:
-                result = await resp.text()
-                if result.startswith("https://"):
-                    return result.strip()
-                raise Exception(f"Catbox response error: {result}")
+async def upload_to_telegram(file_path: str, caption: str = "") -> str:
+    """File ko storage channel mein bhejo aur direct link lo"""
+    # Bot se channel mein file bhejo
+    if file_path.endswith((".jpg", ".jpeg", ".png", ".webp")):
+        msg = await app.send_photo(
+            STORAGE_CHANNEL,
+            file_path,
+            caption=caption,
+        )
+        file_id = msg.photo.file_id
+    elif file_path.endswith((".mp4", ".mkv", ".avi", ".mov")):
+        msg = await app.send_video(
+            STORAGE_CHANNEL,
+            file_path,
+            caption=caption,
+            supports_streaming=True,
+        )
+        file_id = msg.video.file_id
+    else:
+        msg = await app.send_document(
+            STORAGE_CHANNEL,
+            file_path,
+            caption=caption,
+        )
+        file_id = msg.document.file_id
+
+    # Message ka direct link banao
+    # Channel username ho toh: https://t.me/username/msg_id
+    # Private channel ho toh: https://t.me/c/channel_id/msg_id
+    channel_id = str(STORAGE_CHANNEL)
+    if channel_id.startswith("-100"):
+        channel_id = channel_id[4:]  # -100 hatao
+    link = f"https://t.me/c/{channel_id}/{msg.id}"
+    return link, file_id
 
 
 @app.on_message(filters.command(["tgm", "tgt", "telegraph", "tl"]))
@@ -48,19 +53,8 @@ async def get_link_group(client, message):
         )
 
     media = message.reply_to_message
-    is_image = False
 
-    if media.photo:
-        is_image = True
-    elif media.video:
-        is_image = False
-    elif media.animation:
-        is_image = False
-    elif media.document:
-        mime = media.document.mime_type or ""
-        if mime.startswith("image/"):
-            is_image = True
-    else:
+    if not (media.photo or media.video or media.document or media.animation or media.audio or media.voice or media.video_note):
         return await message.reply_text(
             "❌ Pʜᴏᴛᴏ, ᴠɪᴅᴇᴏ, ᴏʀ ᴅᴏᴄᴜᴍᴇɴᴛ ʀᴇᴘʟʏ ᴋᴀʀᴏ."
         )
@@ -80,22 +74,18 @@ async def get_link_group(client, message):
                 pass
 
         local_path = await media.download(progress=progress)
+        await text.edit_text("📤 Uᴘʟᴏᴀᴅɪɴɢ ᴛᴏ Tᴇʟᴇɢʀᴀᴍ...")
 
-        if is_image:
-            await text.edit_text("📤 Uᴘʟᴏᴀᴅɪɴɢ ᴛᴏ Tᴇʟᴇɢʀᴀᴘʜ...")
-            upload_path = await upload_to_telegraph(local_path)
-            host_name = "Tᴇʟᴇɢʀᴀᴘʜ"
-            host_emoji = "📷"
-        else:
-            await text.edit_text("📤 Uᴘʟᴏᴀᴅɪɴɢ ᴛᴏ Cᴀᴛʙᴏx...")
-            upload_path = await upload_to_catbox(local_path)
-            host_name = "Cᴀᴛʙᴏx"
-            host_emoji = "🎥"
+        upload_path, file_id = await upload_to_telegram(
+            local_path,
+            caption=f"Uᴘʟᴏᴀᴅᴇᴅ ʙʏ @{message.from_user.username or message.from_user.id}"
+        )
 
         await text.edit_text(
             f"✅ **Uᴘʟᴏᴀᴅᴇᴅ Sᴜᴄᴄᴇssғᴜʟʟʏ!**\n\n"
-            f"{host_emoji} **Hᴏsᴛ:** {host_name}\n"
-            f"🔗 **Lɪɴᴋ:** `{upload_path}`",
+            f"📦 **Hᴏsᴛ:** Tᴇʟᴇɢʀᴀᴍ\n"
+            f"🔗 **Lɪɴᴋ:** `{upload_path}`\n"
+            f"🆔 **Fɪʟᴇ ID:** `{file_id}`",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -122,19 +112,20 @@ async def get_link_group(client, message):
 
 
 __HELP__ = """
-**ᴛᴇʟᴇɢʀᴀᴘʜ & ᴄᴀᴛʙᴏx ᴜᴘʟᴏᴀᴅ ᴄᴏᴍᴍᴀɴᴅs**
+**ᴛᴇʟᴇɢʀᴀᴍ sᴇʟғ-ʜᴏsᴛɪɴɢ ᴜᴘʟᴏᴀᴅ**
 
 - `/tgm` — ᴍᴇᴅɪᴀ ᴜᴘʟᴏᴀᴅ ᴋᴀʀᴏ
 - `/tgt` — sᴀᴍᴇ ᴀs `/tgm`
 - `/telegraph` — sᴀᴍᴇ ᴀs `/tgm`
 - `/tl` — sᴀᴍᴇ ᴀs `/tgm`
 
-**ᴜᴘʟᴏᴀᴅ ʜᴏsᴛ:**
-- 📷 **ɪᴍᴀɢᴇs** → Tᴇʟᴇɢʀᴀᴘʜ
-- 🎥 **ᴠɪᴅᴇᴏs / ᴅᴏᴄs** → Cᴀᴛʙᴏx
+**ᴋᴀɪsᴇ ᴋᴀᴍ ᴋᴀʀᴛᴀ ʜᴀɪ:**
+ᴍᴇᴅɪᴀ ᴅɪʀᴇᴄᴛ Tᴇʟᴇɢʀᴀᴍ sᴛᴏʀᴀɢᴇ ᴄʜᴀɴɴᴇʟ ᴍᴇɪɴ sᴀᴠᴇ ʜᴏᴛɪ ʜᴀɪ.
+ᴋᴏɪ ᴇxᴛᴇʀɴᴀʟ sᴇʀᴠɪᴄᴇ ɴᴀʜɪɴ, sʙ Tᴇʟᴇɢʀᴀᴍ ᴘᴇ!
 
 **ɴᴏᴛᴇ:**
 - ᴋɪsɪ ʙʜɪ ᴍᴇᴅɪᴀ ᴋᴏ ʀᴇᴘʟʏ ᴋᴀʀᴏ ᴄᴏᴍᴍᴀɴᴅ sᴇ
+- Fɪʟᴇ ʜᴀᴍᴇsʜᴀ ᴀᴠᴀɪʟᴀʙʟᴇ ʀʜᴇɢɪ
 """
 
 __MODULE__ = "Tᴇʟᴇɢʀᴀᴘʜ"
