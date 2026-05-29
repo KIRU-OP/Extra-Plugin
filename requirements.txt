@@ -11,3 +11,5 @@ nekos.py
 telegraph
 uuid
 pytz
+aiohttp 
+telegraph
