@@ -1,131 +1,128 @@
 import os
+import requests
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from VIPMUSIC import app
-from VIPMUSIC.core.userbot import assistants  # ya jo bhi tumhara userbot import hai
 
 
-# Apna ek PUBLIC channel banao aur uska ID yahan daalo
-STORAGE_CHANNEL = -1003884346368  # 👈 Apne channel ka ID daalo
+def upload_to_catbox(file_path):
+    url = "https://catbox.moe/user/api.php"
 
-
-async def upload_to_telegram(file_path: str, caption: str = "") -> str:
-    """File ko storage channel mein bhejo aur direct link lo"""
-    # Bot se channel mein file bhejo
-    if file_path.endswith((".jpg", ".jpeg", ".png", ".webp")):
-        msg = await app.send_photo(
-            STORAGE_CHANNEL,
-            file_path,
-            caption=caption,
+    with open(file_path, "rb") as f:
+        response = requests.post(
+            url,
+            data={"reqtype": "fileupload"},
+            files={"fileToUpload": f},
+            timeout=120,
         )
-        file_id = msg.photo.file_id
-    elif file_path.endswith((".mp4", ".mkv", ".avi", ".mov")):
-        msg = await app.send_video(
-            STORAGE_CHANNEL,
-            file_path,
-            caption=caption,
-            supports_streaming=True,
-        )
-        file_id = msg.video.file_id
-    else:
-        msg = await app.send_document(
-            STORAGE_CHANNEL,
-            file_path,
-            caption=caption,
-        )
-        file_id = msg.document.file_id
 
-    # Message ka direct link banao
-    # Channel username ho toh: https://t.me/username/msg_id
-    # Private channel ho toh: https://t.me/c/channel_id/msg_id
-    channel_id = str(STORAGE_CHANNEL)
-    if channel_id.startswith("-100"):
-        channel_id = channel_id[4:]  # -100 hatao
-    link = f"https://t.me/c/{channel_id}/{msg.id}"
-    return link, file_id
+    if response.status_code != 200:
+        raise Exception("Upload Failed")
+
+    return response.text.strip()
 
 
 @app.on_message(filters.command(["tgm", "tgt", "telegraph", "tl"]))
 async def get_link_group(client, message):
+
     if not message.reply_to_message:
         return await message.reply_text(
-            "Pʟᴇᴀsᴇ ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇᴅɪᴀ ᴛᴏ ᴜᴘʟᴏᴀᴅ."
+            "❌ Reply To A Media File."
         )
 
     media = message.reply_to_message
+    file_size = 0
 
-    if not (media.photo or media.video or media.document or media.animation or media.audio or media.voice or media.video_note):
+    if media.photo:
+        file_size = media.photo.file_size
+
+    elif media.video:
+        file_size = media.video.file_size
+
+    elif media.document:
+        file_size = media.document.file_size
+
+    else:
         return await message.reply_text(
-            "❌ Pʜᴏᴛᴏ, ᴠɪᴅᴇᴏ, ᴏʀ ᴅᴏᴄᴜᴍᴇɴᴛ ʀᴇᴘʟʏ ᴋᴀʀᴏ."
+            "❌ Supported Media:\nPhoto, Video, Document"
         )
 
-    local_path = None
-    text = None
+    if file_size > 200 * 1024 * 1024:
+        return await message.reply_text(
+            "❌ File Size Must Be Under 200MB."
+        )
+
+    text = await message.reply_text(
+        "📥 Downloading..."
+    )
 
     try:
-        text = await message.reply("⏳ Pʀᴏᴄᴇssɪɴɢ...")
 
         async def progress(current, total):
             try:
+                percentage = current * 100 / total
                 await text.edit_text(
-                    f"📥 Dᴏᴡɴʟᴏᴀᴅɪɴɢ... {current * 100 / total:.1f}%"
+                    f"📥 Downloading... {percentage:.1f}%"
                 )
             except Exception:
                 pass
 
-        local_path = await media.download(progress=progress)
-        await text.edit_text("📤 Uᴘʟᴏᴀᴅɪɴɢ ᴛᴏ Tᴇʟᴇɢʀᴀᴍ...")
-
-        upload_path, file_id = await upload_to_telegram(
-            local_path,
-            caption=f"Uᴘʟᴏᴀᴅᴇᴅ ʙʏ @{message.from_user.username or message.from_user.id}"
+        local_path = await media.download(
+            progress=progress
         )
 
         await text.edit_text(
-            f"✅ **Uᴘʟᴏᴀᴅᴇᴅ Sᴜᴄᴄᴇssғᴜʟʟʏ!**\n\n"
-            f"📦 **Hᴏsᴛ:** Tᴇʟᴇɢʀᴀᴍ\n"
-            f"🔗 **Lɪɴᴋ:** `{upload_path}`\n"
-            f"🆔 **Fɪʟᴇ ID:** `{file_id}`",
+            "📤 Uploading To Catbox..."
+        )
+
+        upload_path = upload_to_catbox(local_path)
+
+        await text.edit_text(
+            f"✅ File Uploaded Successfully\n\n🌐 {upload_path}",
+            disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
                         InlineKeyboardButton(
-                            "🌐 Oᴘᴇɴ Lɪɴᴋ",
-                            url=upload_path,
+                            "🌐 Open Link",
+                            url=upload_path
                         )
                     ]
                 ]
-            ),
+            )
         )
 
     except Exception as e:
-        if text:
-            await text.edit_text(
-                f"❌ **Fɪʟᴇ ᴜᴘʟᴏᴀᴅ ғᴀɪʟᴇᴅ**\n\n<i>Rᴇᴀsᴏɴ: {e}</i>"
-            )
-    finally:
-        if local_path:
-            try:
-                os.remove(local_path)
-            except Exception:
-                pass
 
+        await text.edit_text(
+            f"❌ Upload Failed\n\nReason:\n{e}"
+        )
+
+    finally:
+
+        try:
+            if local_path and os.path.exists(local_path):
+                os.remove(local_path)
+        except Exception:
+            pass
+
+
+__MODULE__ = "telegram"
 
 __HELP__ = """
-**ᴛᴇʟᴇɢʀᴀᴍ sᴇʟғ-ʜᴏsᴛɪɴɢ ᴜᴘʟᴏᴀᴅ**
+➠ Reply To Any Media File With:
 
-- `/tgm` — ᴍᴇᴅɪᴀ ᴜᴘʟᴏᴀᴅ ᴋᴀʀᴏ
-- `/tgt` — sᴀᴍᴇ ᴀs `/tgm`
-- `/telegraph` — sᴀᴍᴇ ᴀs `/tgm`
-- `/tl` — sᴀᴍᴇ ᴀs `/tgm`
+/tgm
+/tgt
+/tl
+/telegraph
 
-**ᴋᴀɪsᴇ ᴋᴀᴍ ᴋᴀʀᴛᴀ ʜᴀɪ:**
-ᴍᴇᴅɪᴀ ᴅɪʀᴇᴄᴛ Tᴇʟᴇɢʀᴀᴍ sᴛᴏʀᴀɢᴇ ᴄʜᴀɴɴᴇʟ ᴍᴇɪɴ sᴀᴠᴇ ʜᴏᴛɪ ʜᴀɪ.
-ᴋᴏɪ ᴇxᴛᴇʀɴᴀʟ sᴇʀᴠɪᴄᴇ ɴᴀʜɪɴ, sʙ Tᴇʟᴇɢʀᴀᴍ ᴘᴇ!
+➠ Supported:
+• Photos
+• Videos
+• Documents
 
-**ɴᴏᴛᴇ:**
-- ᴋɪsɪ ʙʜɪ ᴍᴇᴅɪᴀ ᴋᴏ ʀᴇᴘʟʏ ᴋᴀʀᴏ ᴄᴏᴍᴍᴀɴᴅ sᴇ
-- Fɪʟᴇ ʜᴀᴍᴇsʜᴀ ᴀᴠᴀɪʟᴀʙʟᴇ ʀʜᴇɢɪ
+➠ Upload Limit:
+200MB
 """
-
-__MODULE__ = "Tᴇʟᴇɢʀᴀᴘʜ"
