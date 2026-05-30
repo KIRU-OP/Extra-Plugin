@@ -1,4 +1,4 @@
-from pyrogram import filters
+ from pyrogram import filters
 from VIPMUSIC import app
 from config import BANNED_USERS
 import requests
@@ -13,16 +13,23 @@ async def blackpink(client, message):
     msg = await message.reply_text("Creating BlackPink Image...")
 
     name = " ".join(message.command[1:])
-
     url = f"https://api.popcat.xyz/textpro/blackpink?text={name}"
 
     try:
-        await message.reply_photo(url)
+        r = requests.get(url, stream=True)
+
+        with open("blackpink.jpg", "wb") as f:
+            f.write(r.content)
+
+        await message.reply_photo(
+            photo="blackpink.jpg",
+            caption=f"✨ {name}"
+        )
+
     except Exception as e:
         await message.reply_text(f"Error: {e}")
 
     await msg.delete()
-
 
 __MODULE__ = "BLACKPINK"
 
