@@ -1,4 +1,4 @@
- from pyrogram import filters
+from pyrogram import filters
 from VIPMUSIC import app
 from config import BANNED_USERS
 import requests
