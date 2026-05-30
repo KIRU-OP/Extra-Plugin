@@ -208,16 +208,16 @@ async def fetch_ai_question(diff: str) -> dict | None:
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📚 Subject Choose", callback_data="qz_subjects_0"),
-            InlineKeyboardButton("🎲 Random Quick",   callback_data="qz_random"),
+            InlineKeyboardButton("Subject Choose", callback_data="qz_subjects_0"),
+            InlineKeyboardButton("Random Quick",   callback_data="qz_random"),
         ],
         [
-            InlineKeyboardButton("📅 Daily Challenge", callback_data="qz_daily"),
-            InlineKeyboardButton("🏆 Leaderboard",     callback_data="qz_lb"),
+            InlineKeyboardButton("Daily Challenge", callback_data="qz_daily"),
+            InlineKeyboardButton("Leaderboard",     callback_data="qz_lb"),
         ],
         [
-            InlineKeyboardButton("🏅 Achievements",    callback_data="qz_ach"),
-            InlineKeyboardButton("📊 My Stats",        callback_data="qz_stats"),
+            InlineKeyboardButton("Achievements",    callback_data="qz_ach"),
+            InlineKeyboardButton("My Stats",        callback_data="qz_stats"),
         ],
     ])
 
@@ -233,37 +233,37 @@ def subjects_kb(page: int = 0) -> InlineKeyboardMarkup:
         rows.append(row)
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("◀️ Prev", callback_data=f"qz_subjects_{page-1}"))
+        nav.append(InlineKeyboardButton("< Prev", callback_data=f"qz_subjects_{page-1}"))
     if start + per_page < len(items):
-        nav.append(InlineKeyboardButton("Next ▶️", callback_data=f"qz_subjects_{page+1}"))
+        nav.append(InlineKeyboardButton("Next >", callback_data=f"qz_subjects_{page+1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton("🔙 Back", callback_data="qz_main")])
+    rows.append([InlineKeyboardButton("Back", callback_data="qz_main")])
     return InlineKeyboardMarkup(rows)
 
 
 def difficulty_kb(cat_id) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🟢 Easy (+10)",    callback_data=f"qz_diff_{cat_id}_easy"),
-            InlineKeyboardButton("🟡 Medium (+25)",  callback_data=f"qz_diff_{cat_id}_medium"),
+            InlineKeyboardButton("Easy (+10)",    callback_data=f"qz_diff_{cat_id}_easy"),
+            InlineKeyboardButton("Medium (+25)",  callback_data=f"qz_diff_{cat_id}_medium"),
         ],
         [
-            InlineKeyboardButton("🔴 Hard (+50)",    callback_data=f"qz_diff_{cat_id}_hard"),
-            InlineKeyboardButton("💀 Expert (+100)", callback_data=f"qz_diff_{cat_id}_expert"),
+            InlineKeyboardButton("Hard (+50)",    callback_data=f"qz_diff_{cat_id}_hard"),
+            InlineKeyboardButton("Expert (+100)", callback_data=f"qz_diff_{cat_id}_expert"),
         ],
-        [InlineKeyboardButton("🔙 Back", callback_data="qz_subjects_0")],
+        [InlineKeyboardButton("Back", callback_data="qz_subjects_0")],
     ])
 
 
 def answer_kb(msg_id: int, options: list, correct_idx: int) -> InlineKeyboardMarkup:
-    """Build answer buttons A/B/C/D."""
-    letters = ["🅐", "🅑", "🅒", "🅓"]
+    """Build answer buttons A/B/C/D — clean, no emoji."""
+    letters = ["A", "B", "C", "D"]
     rows = []
     for i, opt in enumerate(options):
-        short = opt[:30] + "…" if len(opt) > 30 else opt
+        short = opt[:32] + "…" if len(opt) > 32 else opt
         rows.append([InlineKeyboardButton(
-            f"{letters[i]} {short}",
+            f"{letters[i]}.  {short}",
             callback_data=f"qz_ans_{msg_id}_{i}"
         )])
     return InlineKeyboardMarkup(rows)
@@ -447,7 +447,7 @@ async def cb_lb(client, cb: CallbackQuery):
         lines.append(f"{rank_emoji(i)} **{st.get('name','?')[:18]}** — {st['score']} pts")
     await cb.message.edit_text(
         "\n".join(lines),
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="qz_main")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="qz_main")]])
     )
     await cb.answer()
 
@@ -460,7 +460,7 @@ async def cb_ach(client, cb: CallbackQuery):
         lines.append(f"{'✅' if key in st['achievements'] else '🔒'} {title}")
     await cb.message.edit_text(
         "\n".join(lines),
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="qz_main")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="qz_main")]])
     )
     await cb.answer()
 
@@ -479,7 +479,7 @@ async def cb_stats(client, cb: CallbackQuery):
         f"⚡ Best:     {st['best_streak']}\n"
         f"🗺️ Subjects: {len(st['cats_tried'])}\n"
         f"🏅 Badges:   {len(st['achievements'])}/{len(ACHIEVEMENTS)}",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="qz_main")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="qz_main")]])
     )
     await cb.answer()
 
@@ -549,8 +549,8 @@ async def _send_question(
             await message.edit_text(
                 "❌ Question fetch nahi hua. Retry karo!",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔄 Retry", callback_data=f"qz_diff_{cat_id}_{diff}"),
-                    InlineKeyboardButton("🔙 Menu",  callback_data="qz_main"),
+                    InlineKeyboardButton("Retry", callback_data=f"qz_diff_{cat_id}_{diff}"),
+                    InlineKeyboardButton("Menu",  callback_data="qz_main"),
                 ]])
             )
         except Exception:
@@ -641,12 +641,12 @@ def gq_subjects_kb(page: int = 0) -> InlineKeyboardMarkup:
         rows.append(row)
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("◀️ Prev", callback_data=f"gq_page_{page-1}"))
+        nav.append(InlineKeyboardButton("< Prev", callback_data=f"gq_page_{page-1}"))
     if start + per_page < len(items):
-        nav.append(InlineKeyboardButton("Next ▶️", callback_data=f"gq_page_{page+1}"))
+        nav.append(InlineKeyboardButton("Next >", callback_data=f"gq_page_{page+1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton("❌ Cancel", callback_data="gq_cancel")])
+    rows.append([InlineKeyboardButton("Cancel", callback_data="gq_cancel")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -654,15 +654,15 @@ def gq_difficulty_kb(cat_id) -> InlineKeyboardMarkup:
     """Difficulty picker for group quiz — all 4 levels."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🟢 Easy   (+10 × 20Q)",  callback_data=f"gq_start_{cat_id}_easy"),
-            InlineKeyboardButton("🟡 Medium (+25 × 20Q)",  callback_data=f"gq_start_{cat_id}_medium"),
+            InlineKeyboardButton("Easy (+10 x 20Q)",  callback_data=f"gq_start_{cat_id}_easy"),
+            InlineKeyboardButton("Medium (+25 x 20Q)",  callback_data=f"gq_start_{cat_id}_medium"),
         ],
         [
-            InlineKeyboardButton("🔴 Hard   (+50 × 20Q)",  callback_data=f"gq_start_{cat_id}_hard"),
-            InlineKeyboardButton("💀 Expert (+100 × 20Q)", callback_data=f"gq_start_{cat_id}_expert"),
+            InlineKeyboardButton("Hard (+50 x 20Q)",  callback_data=f"gq_start_{cat_id}_hard"),
+            InlineKeyboardButton("Expert (+100 x 20Q)", callback_data=f"gq_start_{cat_id}_expert"),
         ],
-        [InlineKeyboardButton("🔙 Back to Subjects", callback_data="gq_page_0")],
-        [InlineKeyboardButton("❌ Cancel",            callback_data="gq_cancel")],
+        [InlineKeyboardButton("Back to Subjects", callback_data="gq_page_0")],
+        [InlineKeyboardButton("Cancel",            callback_data="gq_cancel")],
     ])
 
 
@@ -713,17 +713,19 @@ async def stopquiz_cmd(client, message: Message):
             f"❌ **{chat_title}** mein koi active quiz nahi chal raha."
         )
 
-    # Permission: sirf group admin ya owner hi stop kar sakta hai
-    is_admin = False
-    try:
-        member   = await client.get_chat_member(chat_id, uid)
-        is_admin = member.status.value in ("administrator", "creator")
-    except Exception:
-        pass
+    # Private chat mein admin check nahi — group mein sirf admin
+    is_private = message.chat.type.value == "private"
+    is_admin   = is_private  # private chat mein sender hi owner hota hai
+    if not is_private:
+        try:
+            member   = await client.get_chat_member(chat_id, uid)
+            is_admin = member.status.value in ("administrator", "creator")
+        except Exception:
+            pass
 
     if not is_admin:
         return await message.reply_text(
-            "⛔ **Sirf group admin ya owner quiz band kar sakte hain!**"
+            "Sirf group admin quiz band kar sakte hain."
         )
 
     # Authorized — stop
@@ -892,35 +894,36 @@ async def _run_group_quiz(client, chat_id: int, session: dict):
         random.shuffle(options)
         correct_idx = options.index(correct_ans)
 
-        letters   = ["🅐", "🅑", "🅒", "🅓"]
-        opts_text = "\n".join(f"{letters[i]} {opt}" for i, opt in enumerate(options))
+        letters   = ["A", "B", "C", "D"]
+        opts_text = "\n".join(f"{letters[i]}.  {opt}" for i, opt in enumerate(options))
         progress  = f"[{'█' * q_num}{'░' * (total - q_num)}] {q_num}/{total}"
 
-        header = (
-            f"🏆 **Group Quiz** — {cat_name} | {cfg['label']}\n"
-            f"📊 {progress}\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"❓ **Q{q_num}.** {question}\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"{opts_text}\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⏱ {cfg['time']}s  |  💎 {cfg['pts']} pts"
-        )
+        def build_msg(secs_left: int) -> str:
+            bar_filled = round(secs_left / cfg["time"] * 10)
+            bar = "█" * bar_filled + "░" * (10 - bar_filled)
+            return (
+                f"**Group Quiz** — {cat_name} | {cfg['label']}\n"
+                f"{progress}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"**Q{q_num}.** {question}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{opts_text}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"[{bar}] {secs_left}s  |  {cfg['pts']} pts"
+            )
 
         # ── Send question ─────────────────────────────────────
         try:
             sent = await client.send_message(
                 chat_id,
-                header,
-                reply_markup=answer_kb(0, options, correct_idx),  # placeholder id
+                build_msg(cfg["time"]),
+                reply_markup=answer_kb(0, options, correct_idx),
             )
         except Exception:
             await asyncio.sleep(3)
             continue
 
-        # Re-register with real msg_id
         real_id = sent.id
-        # Edit keyboard with correct msg_id buttons
         try:
             await sent.edit_reply_markup(answer_kb(real_id, options, correct_idx))
         except Exception:
@@ -935,19 +938,31 @@ async def _run_group_quiz(client, chat_id: int, session: dict):
             "chat_id":        chat_id,
             "answered_by":    set(),
             "created_at":     time.time(),
-            "gq_session":     session,   # link to session for score tracking
+            "gq_session":     session,
         }
 
-        # ── Wait for answers then reveal ──────────────────────
-        await asyncio.sleep(cfg["time"])
+        # ── Live countdown timer (edit every 5s) ──────────────
+        time_left = cfg["time"]
+        while time_left > 0 and session.get("running"):
+            await asyncio.sleep(min(5, time_left))
+            time_left -= 5
+            if time_left > 0 and real_id in active_questions:
+                try:
+                    await sent.edit_text(
+                        build_msg(max(0, time_left)),
+                        reply_markup=answer_kb(real_id, options, correct_idx),
+                    )
+                except Exception:
+                    pass
 
         # Remove from active so no more answers accepted
         active_questions.pop(real_id, None)
 
         # Build result text
         result_lines = [
-            f"⏰ **Time Up! Q{q_num} Answer:**\n"
-            f"✅ {letters[correct_idx]} **{options[correct_idx]}**\n"
+            f"**Q{q_num} Answer:**",
+            f"✅  {letters[correct_idx]}.  **{options[correct_idx]}**",
+            "",
         ]
 
         # Show who got it right
@@ -958,9 +973,9 @@ async def _run_group_quiz(client, chat_id: int, session: dict):
             if v.get("last_q") == q_num and v.get("last_correct")
         ]
         if correct_users:
-            result_lines.append("🎉 **Sahi jawab dene wale:**\n" + "\n".join(correct_users))
+            result_lines.append("Sahi jawab:\n" + "\n".join(correct_users))
         else:
-            result_lines.append("😶 Kisi ne sahi jawab nahi diya!")
+            result_lines.append("Kisi ne sahi jawab nahi diya.")
 
         try:
             await client.send_message(chat_id, "\n".join(result_lines))
@@ -1032,7 +1047,7 @@ async def cb_answer_v2(client, cb: CallbackQuery):
     options     = info["options"]
     pts         = info["pts"]
     won         = (chosen == correct_idx)
-    letters     = ["🅐", "🅑", "🅒", "🅓"]
+    letters     = ["A", "B", "C", "D"]
 
     # ── Group quiz session score tracking ─────────────────────
     gq_sess = info.get("gq_session")
