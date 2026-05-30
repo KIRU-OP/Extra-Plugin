@@ -26,7 +26,7 @@ from VIPMUSIC.utils.functions import (
     time_converter,
 )
 from utils.permissions import adminsOnly, member_permissions
-from config import BANNED_USERS
+from config import BANNED_USERS, OWNER_ID
 
 warnsdb = mongodb.warns
 
@@ -634,13 +634,6 @@ async def check_warns(_, message: Message):
         return await message.reply_text(f"{mention} ʜᴀs ɴᴏ ᴡᴀʀɴɪɴɢs.")
     return await message.reply_text(f"{mention} ʜᴀs {warns}/3 ᴡᴀʀɴɪɴɢs")
 
-
-from pyrogram import filters
-from VIPMUSIC import app
-from VIPMUSIC.misc import SUDOERS
-import asyncio
-from pyrogram.errors import FloodWait
-from config import OWNER_ID  # Bot owner ka ID config se lena
 
 BOT_ID = app.id
 
