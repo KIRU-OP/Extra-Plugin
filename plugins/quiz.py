@@ -16,6 +16,7 @@ from datetime import datetime, date
 
 from pyrogram import filters
 from pyrogram.enums import PollType, ChatAction
+from pyrogram.handlers import PollAnswerHandler
 from pyrogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
@@ -649,8 +650,8 @@ async def _send_question(
 
 # ══════════════════════════════════════════════════════════════
 #  POLL ANSWER HANDLER
+#  NOTE: Pyrogram uses PollAnswerHandler — not @app.on_poll_answer()
 # ══════════════════════════════════════════════════════════════
-@app.on_poll_answer()
 async def on_poll_answer(client, poll_answer):
     pid    = poll_answer.poll_id
     uid    = poll_answer.user.id
@@ -701,6 +702,9 @@ async def on_poll_answer(client, poll_answer):
     except Exception:
         pass
 
+
+# ── Register poll answer handler correctly ──────────────────
+app.add_handler(PollAnswerHandler(on_poll_answer))
 
 # ══════════════════════════════════════════════════════════════
 #  MODULE META
