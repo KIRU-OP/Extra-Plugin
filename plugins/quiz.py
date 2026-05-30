@@ -673,15 +673,29 @@ async def groupquiz_cmd(client, message: Message):
 
     # Block if a session already running in this group
     if chat_id in group_quiz_sessions and group_quiz_sessions[chat_id].get("running"):
+        sess       = group_quiz_sessions[chat_id]
+        starter_nm = sess.get("starter_name", "kisi ne")
+        cat_name   = sess.get("cat_name", "Quiz")
+        diff       = sess.get("diff", "medium")
+        cfg        = DIFFICULTY.get(diff, DIFFICULTY["medium"])
+        q_done     = sess.get("current", 0)
         return await message.reply_text(
-            "⚠️ Is group mein pehle se quiz chal raha hai!\n"
-            "Usse khatam hone do ya /stopquiz se band karo."
+            f"⚠️ **{message.chat.title or 'Is group'} mein pehle se quiz chal raha hai!**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 Started by: **{starter_nm}**\n"
+            f"📚 Subject:    **{cat_name}**\n"
+            f"🎯 Difficulty: **{cfg['label']}**\n"
+            f"📊 Progress:   **{q_done}/{GROUP_QUIZ_TOTAL}** questions\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"Khatam hone do ya /stopquiz se band karo."
         )
 
+    chat_title = message.chat.title or "Group"
     await message.reply_text(
-        "🏆 **Group Back-to-Back Quiz — 20 Questions!**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "📚 Pehle **subject** choose karo:",
+        f"🏆 **Group Back-to-Back Quiz — 20 Questions!**\n"
+        f"🏠 **{chat_title}**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📚 Pehle **subject** choose karo:",
         reply_markup=gq_subjects_kb(0),
     )
 
@@ -689,13 +703,63 @@ async def groupquiz_cmd(client, message: Message):
 # ── /stopquiz command ─────────────────────────────────────────
 @app.on_message(filters.command(["stopquiz"]))
 async def stopquiz_cmd(client, message: Message):
-    chat_id = message.chat.id
-    sess = group_quiz_sessions.pop(chat_id, None)
-    if sess and sess.get("running"):
-        sess["running"] = False
-        await message.reply_text("🛑 Group quiz band kar diya gaya!")
+    chat_id    = message.chat.id
+    uid        = message.from_user.id
+    chat_title = message.chat.title or "Group"
+    sess       = group_quiz_sessions.get(chat_id)
+
+    if not sess or not sess.get("running"):
+        return await message.reply_text(
+            f"❌ **{chat_title}** mein koi active quiz nahi chal raha."
+        )
+
+    # Permission: sirf group admin ya owner hi stop kar sakta hai
+    is_admin = False
+    try:
+        member   = await client.get_chat_member(chat_id, uid)
+        is_admin = member.status.value in ("administrator", "creator")
+    except Exception:
+        pass
+
+    if not is_admin:
+        return await message.reply_text(
+            "⛔ **Sirf group admin ya owner quiz band kar sakte hain!**"
+        )
+
+    # Authorized — stop
+    sess["running"] = False
+    group_quiz_sessions.pop(chat_id, None)
+
+    q_done     = sess.get("current", 0)
+    cat_name   = sess.get("cat_name", "Quiz")
+    diff       = sess.get("diff", "medium")
+    cfg        = DIFFICULTY.get(diff, DIFFICULTY["medium"])
+    stopper_nm = message.from_user.first_name or "Admin"
+    scoreboard = sess.get("scores", {})
+
+    lines = [
+        f"🛑 **Quiz Rokk Diya!**",
+        f"━━━━━━━━━━━━━━━━━━━━",
+        f"🏠 Group:      **{chat_title}**",
+        f"👤 Roka by:    **{stopper_nm}**",
+        f"📚 Subject:    **{cat_name}**",
+        f"🎯 Difficulty: **{cfg['label']}**",
+        f"📊 Completed:  **{q_done}/{GROUP_QUIZ_TOTAL}** questions",
+        f"━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    if scoreboard:
+        top = sorted(scoreboard.items(), key=lambda x: x[1]["pts"], reverse=True)
+        lines.append("📋 **Partial Results:**")
+        for i, (_, v) in enumerate(top[:5], 1):
+            lines.append(
+                f"{rank_emoji(i)} **{v['name'][:18]}** — "
+                f"{v['pts']} pts  ✅{v['correct']}/{q_done}"
+            )
     else:
-        await message.reply_text("❌ Is group mein koi active quiz nahi hai.")
+        lines.append("😶 Kisi ne jawab nahi diya.")
+
+    await message.reply_text("\n".join(lines))
 
 
 # ── Callback: page navigation ─────────────────────────────────
@@ -749,29 +813,38 @@ async def gq_start_cb(client, cb: CallbackQuery):
     if chat_id in group_quiz_sessions and group_quiz_sessions[chat_id].get("running"):
         return await cb.answer("⚠️ Quiz pehle se chal raha hai!", show_alert=True)
 
-    cat_name = next((n for n, c in CATEGORIES.items() if str(c) == str(cat_id)), "Quiz")
-    cfg      = DIFFICULTY.get(diff, DIFFICULTY["medium"])
+    cat_name   = next((n for n, c in CATEGORIES.items() if str(c) == str(cat_id)), "Quiz")
+    cfg        = DIFFICULTY.get(diff, DIFFICULTY["medium"])
+    starter_id = cb.from_user.id
+    starter_nm = cb.from_user.first_name or "Player"
+    chat_title = cb.message.chat.title or "Group"
 
     session = {
-        "running":   True,
-        "cat_id":    cat_id,
-        "cat_name":  cat_name,
-        "diff":      diff,
-        "current":   0,
-        "scores":    {},   # uid → {name, pts, correct}
+        "running":      True,
+        "cat_id":       cat_id,
+        "cat_name":     cat_name,
+        "diff":         diff,
+        "current":      0,
+        "scores":       {},
+        "started_by":   starter_id,
+        "starter_name": starter_nm,
+        "chat_title":   chat_title,
     }
     group_quiz_sessions[chat_id] = session
 
     await cb.message.edit_text(
         f"🚀 **Group Quiz Shuru!**\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🏠 Group:      **{chat_title}**\n"
+        f"👤 Started by: **{starter_nm}**\n"
         f"📚 Subject:    **{cat_name}**\n"
         f"🎯 Difficulty: **{cfg['label']}**\n"
         f"📝 Questions:  **{GROUP_QUIZ_TOTAL}**\n"
         f"💎 Per Q:      **{cfg['pts']} pts** (+ streak bonus)\n"
         f"⏱ Time/Q:     **{cfg['time']}s**\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Pehla question aane wala hai... 🔥"
+        f"Pehla question aane wala hai... 🔥\n"
+        f"_/stopquiz — Sirf group admin band kar sakte hain_"
     )
     await cb.answer("Quiz start! 🎉")
 
