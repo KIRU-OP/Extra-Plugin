@@ -503,70 +503,7 @@ async def cb_diff(client, cb: CallbackQuery):
     await cb.answer()
     await _send_question(cb.message, uid, cat_id, diff, cat_name)
 
-# ══════════════════════════════════════════════════════════════
-#  ANSWER BUTTON CALLBACK
-# ══════════════════════════════════════════════════════════════
-@app.on_callback_query(filters.regex(r"^qz_ans_(-?\d+)_(\d+)$"))
-async def cb_answer(client, cb: CallbackQuery):
-    msg_id  = int(cb.matches[0].group(1))
-    chosen  = int(cb.matches[0].group(2))
-    uid     = cb.from_user.id
-    name    = cb.from_user.first_name or "Player"
-
-    if msg_id not in active_questions:
-        return await cb.answer("❌ Yeh question expire ho gaya!", show_alert=True)
-
-    info = active_questions[msg_id]
-
-    # One answer per user per question
-    answered_by = info.setdefault("answered_by", set())
-    if uid in answered_by:
-        return await cb.answer("⚠️ Tu pehle hi jawab de chuka hai!", show_alert=True)
-    answered_by.add(uid)
-
-    st = get_user(uid)
-    st["name"]  = name
-    st["total"] += 1
-
-    correct_idx = info["correct_idx"]
-    options     = info["options"]
-    pts         = info["pts"]
-    won         = (chosen == correct_idx)
-
-    letters = ["🅐", "🅑", "🅒", "🅓"]
-
-    if won:
-        st["correct"]     += 1
-        st["streak"]      += 1
-        st["score"]       += pts
-        st["best_streak"]  = max(st["best_streak"], st["streak"])
-        acc = accuracy(st)
-        result = (
-            f"✅ **Sahi jawab, {name}!**\n"
-            f"{letters[correct_idx]} {options[correct_idx]}\n\n"
-            f"💎 +{pts} pts  |  🔥 Streak: {streak_label(st['streak'])}\n"
-            f"🏆 Total: {st['score']} pts  |  📊 {acc}%"
-        )
-        await cb.answer("✅ Sahi! +" + str(pts) + " pts", show_alert=False)
-    else:
-        st["streak"] = 0
-        result = (
-            f"❌ **Galat, {name}!**\n"
-            f"Tera jawab: {letters[chosen]} {options[chosen]}\n"
-            f"Sahi jawab: {letters[correct_idx]} **{options[correct_idx]}**\n\n"
-            f"💔 Streak reset  |  Score: {st['score']} pts"
-        )
-        await cb.answer("❌ Galat jawab!", show_alert=False)
-
-    new_ach = check_achievements(uid, st)
-
-    try:
-        await cb.message.reply_text(result)
-        for ach in new_ach:
-            await asyncio.sleep(0.4)
-            await cb.message.reply_text(ach)
-    except Exception:
-        pass
+# (Answer callback is handled below in cb_answer_v2 which covers both solo + group quiz)
 
 # ══════════════════════════════════════════════════════════════
 #  CORE: FETCH + SEND QUESTION
@@ -676,13 +613,432 @@ async def _send_question(
     asyncio.create_task(expire())
 
 # ══════════════════════════════════════════════════════════════
+#  BACK-TO-BACK GROUP QUIZ  (/groupquiz)
+#  Flow:
+#    1. /groupquiz  → subject selection keyboard
+#    2. User picks subject → difficulty keyboard
+#    3. User picks difficulty → 20 questions fire one by one
+#       with GROUP_QUIZ_GAP seconds gap between each
+# ══════════════════════════════════════════════════════════════
+
+GROUP_QUIZ_TOTAL = 20
+GROUP_QUIZ_GAP   = 8   # seconds between questions
+group_quiz_sessions: dict = {}  # chat_id → session dict
+
+
+def gq_subjects_kb(page: int = 0) -> InlineKeyboardMarkup:
+    """Subject picker for group quiz (paginated, 12 per page)."""
+    items = list(CATEGORIES.items())
+    per_page = 12
+    start = page * per_page
+    chunk = items[start:start + per_page]
+    rows = []
+    for i in range(0, len(chunk), 2):
+        row = [
+            InlineKeyboardButton(n, callback_data=f"gq_sub_{c}_p{page}")
+            for n, c in chunk[i:i+2]
+        ]
+        rows.append(row)
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️ Prev", callback_data=f"gq_page_{page-1}"))
+    if start + per_page < len(items):
+        nav.append(InlineKeyboardButton("Next ▶️", callback_data=f"gq_page_{page+1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("❌ Cancel", callback_data="gq_cancel")])
+    return InlineKeyboardMarkup(rows)
+
+
+def gq_difficulty_kb(cat_id) -> InlineKeyboardMarkup:
+    """Difficulty picker for group quiz — all 4 levels."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🟢 Easy   (+10 × 20Q)",  callback_data=f"gq_start_{cat_id}_easy"),
+            InlineKeyboardButton("🟡 Medium (+25 × 20Q)",  callback_data=f"gq_start_{cat_id}_medium"),
+        ],
+        [
+            InlineKeyboardButton("🔴 Hard   (+50 × 20Q)",  callback_data=f"gq_start_{cat_id}_hard"),
+            InlineKeyboardButton("💀 Expert (+100 × 20Q)", callback_data=f"gq_start_{cat_id}_expert"),
+        ],
+        [InlineKeyboardButton("🔙 Back to Subjects", callback_data="gq_page_0")],
+        [InlineKeyboardButton("❌ Cancel",            callback_data="gq_cancel")],
+    ])
+
+
+# ── /groupquiz command ────────────────────────────────────────
+@app.on_message(filters.command(["groupquiz", "gquiz"]))
+async def groupquiz_cmd(client, message: Message):
+    chat_id = message.chat.id
+
+    # Block if a session already running in this group
+    if chat_id in group_quiz_sessions and group_quiz_sessions[chat_id].get("running"):
+        return await message.reply_text(
+            "⚠️ Is group mein pehle se quiz chal raha hai!\n"
+            "Usse khatam hone do ya /stopquiz se band karo."
+        )
+
+    await message.reply_text(
+        "🏆 **Group Back-to-Back Quiz — 20 Questions!**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📚 Pehle **subject** choose karo:",
+        reply_markup=gq_subjects_kb(0),
+    )
+
+
+# ── /stopquiz command ─────────────────────────────────────────
+@app.on_message(filters.command(["stopquiz"]))
+async def stopquiz_cmd(client, message: Message):
+    chat_id = message.chat.id
+    sess = group_quiz_sessions.pop(chat_id, None)
+    if sess and sess.get("running"):
+        sess["running"] = False
+        await message.reply_text("🛑 Group quiz band kar diya gaya!")
+    else:
+        await message.reply_text("❌ Is group mein koi active quiz nahi hai.")
+
+
+# ── Callback: page navigation ─────────────────────────────────
+@app.on_callback_query(filters.regex(r"^gq_page_(\d+)$"))
+async def gq_page_cb(client, cb: CallbackQuery):
+    page = int(cb.matches[0].group(1))
+    await cb.message.edit_text(
+        "🏆 **Group Back-to-Back Quiz — 20 Questions!**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📚 Pehle **subject** choose karo:",
+        reply_markup=gq_subjects_kb(page),
+    )
+    await cb.answer()
+
+
+# ── Callback: subject selected → show difficulty ──────────────
+@app.on_callback_query(filters.regex(r"^gq_sub_(.+)_p(\d+)$"))
+async def gq_sub_cb(client, cb: CallbackQuery):
+    raw    = cb.matches[0].group(1)
+    cat_id = raw if raw == "ai" else int(raw)
+    cat_name = next((n for n, c in CATEGORIES.items() if str(c) == str(cat_id)), "Quiz")
+
+    await cb.message.edit_text(
+        f"✅ Subject: **{cat_name}**\n\n"
+        f"🎯 Ab **difficulty** choose karo:\n"
+        f"_(Streak bonus bhi milega — 3x=×1.5, 5x=×2, 10x=×3)_",
+        reply_markup=gq_difficulty_kb(cat_id),
+    )
+    await cb.answer()
+
+
+# ── Callback: cancel ─────────────────────────────────────────
+@app.on_callback_query(filters.regex(r"^gq_cancel$"))
+async def gq_cancel_cb(client, cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    sess = group_quiz_sessions.pop(chat_id, None)
+    if sess:
+        sess["running"] = False
+    await cb.message.edit_text("❌ Group quiz cancel kar diya.")
+    await cb.answer()
+
+
+# ── Callback: difficulty selected → LAUNCH SESSION ───────────
+@app.on_callback_query(filters.regex(r"^gq_start_(.+)_(\w+)$"))
+async def gq_start_cb(client, cb: CallbackQuery):
+    raw    = cb.matches[0].group(1)
+    diff   = cb.matches[0].group(2)
+    cat_id = raw if raw == "ai" else int(raw)
+    chat_id = cb.message.chat.id
+
+    if chat_id in group_quiz_sessions and group_quiz_sessions[chat_id].get("running"):
+        return await cb.answer("⚠️ Quiz pehle se chal raha hai!", show_alert=True)
+
+    cat_name = next((n for n, c in CATEGORIES.items() if str(c) == str(cat_id)), "Quiz")
+    cfg      = DIFFICULTY.get(diff, DIFFICULTY["medium"])
+
+    session = {
+        "running":   True,
+        "cat_id":    cat_id,
+        "cat_name":  cat_name,
+        "diff":      diff,
+        "current":   0,
+        "scores":    {},   # uid → {name, pts, correct}
+    }
+    group_quiz_sessions[chat_id] = session
+
+    await cb.message.edit_text(
+        f"🚀 **Group Quiz Shuru!**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📚 Subject:    **{cat_name}**\n"
+        f"🎯 Difficulty: **{cfg['label']}**\n"
+        f"📝 Questions:  **{GROUP_QUIZ_TOTAL}**\n"
+        f"💎 Per Q:      **{cfg['pts']} pts** (+ streak bonus)\n"
+        f"⏱ Time/Q:     **{cfg['time']}s**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"Pehla question aane wala hai... 🔥"
+    )
+    await cb.answer("Quiz start! 🎉")
+
+    # Launch the marathon as a background task
+    asyncio.create_task(_run_group_quiz(client, chat_id, session))
+
+
+# ── Core runner: fires 20 questions one by one ────────────────
+async def _run_group_quiz(client, chat_id: int, session: dict):
+    cat_id   = session["cat_id"]
+    cat_name = session["cat_name"]
+    diff     = session["diff"]
+    cfg      = DIFFICULTY.get(diff, DIFFICULTY["medium"])
+    total    = GROUP_QUIZ_TOTAL
+
+    await asyncio.sleep(3)  # Small countdown buffer
+
+    for q_num in range(1, total + 1):
+        if not session.get("running"):
+            break
+
+        session["current"] = q_num
+
+        # ── Fetch question ────────────────────────────────────
+        if cat_id == "ai":
+            q = await fetch_ai_question(diff if diff != "expert" else "hard")
+        else:
+            q = await fetch_opentdb(cat_id, diff)
+            if not q:
+                await asyncio.sleep(1.5)
+                q = await fetch_opentdb(cat_id, "medium")
+
+        if not q:
+            await client.send_message(
+                chat_id,
+                f"❌ Q{q_num}: Question fetch nahi hua, skip kar rahe hain..."
+            )
+            await asyncio.sleep(3)
+            continue
+
+        # ── Build question message ────────────────────────────
+        question    = html.unescape(q["question"])
+        correct_ans = html.unescape(q["correct_answer"])
+        options     = [html.unescape(a) for a in q["incorrect_answers"]] + [correct_ans]
+        random.shuffle(options)
+        correct_idx = options.index(correct_ans)
+
+        letters   = ["🅐", "🅑", "🅒", "🅓"]
+        opts_text = "\n".join(f"{letters[i]} {opt}" for i, opt in enumerate(options))
+        progress  = f"[{'█' * q_num}{'░' * (total - q_num)}] {q_num}/{total}"
+
+        header = (
+            f"🏆 **Group Quiz** — {cat_name} | {cfg['label']}\n"
+            f"📊 {progress}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"❓ **Q{q_num}.** {question}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{opts_text}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏱ {cfg['time']}s  |  💎 {cfg['pts']} pts"
+        )
+
+        # ── Send question ─────────────────────────────────────
+        try:
+            sent = await client.send_message(
+                chat_id,
+                header,
+                reply_markup=answer_kb(0, options, correct_idx),  # placeholder id
+            )
+        except Exception:
+            await asyncio.sleep(3)
+            continue
+
+        # Re-register with real msg_id
+        real_id = sent.id
+        # Edit keyboard with correct msg_id buttons
+        try:
+            await sent.edit_reply_markup(answer_kb(real_id, options, correct_idx))
+        except Exception:
+            pass
+
+        active_questions[real_id] = {
+            "correct_idx":    correct_idx,
+            "options":        options,
+            "pts":            cfg["pts"],
+            "cat":            cat_name,
+            "diff":           diff,
+            "chat_id":        chat_id,
+            "answered_by":    set(),
+            "created_at":     time.time(),
+            "gq_session":     session,   # link to session for score tracking
+        }
+
+        # ── Wait for answers then reveal ──────────────────────
+        await asyncio.sleep(cfg["time"])
+
+        # Remove from active so no more answers accepted
+        active_questions.pop(real_id, None)
+
+        # Build result text
+        result_lines = [
+            f"⏰ **Time Up! Q{q_num} Answer:**\n"
+            f"✅ {letters[correct_idx]} **{options[correct_idx]}**\n"
+        ]
+
+        # Show who got it right
+        scoreboard = session["scores"]
+        correct_users = [
+            f"  {rank_emoji(i+1)} {v['name']} (+{v.get('last_pts', cfg['pts'])} pts)"
+            for i, (uid, v) in enumerate(scoreboard.items())
+            if v.get("last_q") == q_num and v.get("last_correct")
+        ]
+        if correct_users:
+            result_lines.append("🎉 **Sahi jawab dene wale:**\n" + "\n".join(correct_users))
+        else:
+            result_lines.append("😶 Kisi ne sahi jawab nahi diya!")
+
+        try:
+            await client.send_message(chat_id, "\n".join(result_lines))
+        except Exception:
+            pass
+
+        # Gap before next question
+        if q_num < total and session.get("running"):
+            await asyncio.sleep(GROUP_QUIZ_GAP)
+
+    # ── Session over → Final Leaderboard ─────────────────────
+    if not session.get("running"):
+        return  # Was stopped manually
+
+    session["running"] = False
+    group_quiz_sessions.pop(chat_id, None)
+
+    scoreboard = session["scores"]
+    if not scoreboard:
+        await client.send_message(
+            chat_id,
+            "🏁 **Group Quiz Khatam!**\n\nKisi ne participate nahi kiya. 😢"
+        )
+        return
+
+    top = sorted(scoreboard.items(), key=lambda x: x[1]["pts"], reverse=True)
+    lines = [
+        f"🏁 **Group Quiz Khatam! — Final Results**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📚 {cat_name}  |  {cfg['label']}\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
+    ]
+    for i, (uid, v) in enumerate(top[:10], 1):
+        acc_pct = round(v["correct"] / total * 100)
+        lines.append(
+            f"{rank_emoji(i)} **{v['name'][:18]}** — "
+            f"{v['pts']} pts  ✅{v['correct']}/{total}  ({acc_pct}%)"
+        )
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"🥇 Champion: **{top[0][1]['name']}** 🎉")
+
+    await client.send_message(chat_id, "\n".join(lines))
+
+
+# ── Patch cb_answer to also update group quiz scoreboard ──────
+# Override the original cb_answer to handle group quiz scoring
+
+@app.on_callback_query(filters.regex(r"^qz_ans_(-?\d+)_(\d+)$"))
+async def cb_answer_v2(client, cb: CallbackQuery):
+    msg_id = int(cb.matches[0].group(1))
+    chosen = int(cb.matches[0].group(2))
+    uid    = cb.from_user.id
+    name   = cb.from_user.first_name or "Player"
+
+    if msg_id not in active_questions:
+        return await cb.answer("❌ Yeh question expire ho gaya!", show_alert=True)
+
+    info = active_questions[msg_id]
+    answered_by = info.setdefault("answered_by", set())
+    if uid in answered_by:
+        return await cb.answer("⚠️ Tu pehle hi jawab de chuka hai!", show_alert=True)
+    answered_by.add(uid)
+
+    st = get_user(uid)
+    st["name"]  = name
+    st["total"] += 1
+
+    correct_idx = info["correct_idx"]
+    options     = info["options"]
+    pts         = info["pts"]
+    won         = (chosen == correct_idx)
+    letters     = ["🅐", "🅑", "🅒", "🅓"]
+
+    # ── Group quiz session score tracking ─────────────────────
+    gq_sess = info.get("gq_session")
+    if gq_sess is not None:
+        scoreboard = gq_sess["scores"]
+        if uid not in scoreboard:
+            scoreboard[uid] = {"name": name, "pts": 0, "correct": 0,
+                               "last_q": 0, "last_correct": False, "last_pts": 0}
+        entry = scoreboard[uid]
+        entry["last_q"]       = gq_sess["current"]
+        entry["last_correct"] = won
+        if won:
+            bonus    = round(pts * streak_mult(st["streak"]))
+            entry["pts"]      += bonus
+            entry["correct"]  += 1
+            entry["last_pts"]  = bonus
+            st["correct"]     += 1
+            st["streak"]      += 1
+            st["score"]       += bonus
+            st["best_streak"]  = max(st["best_streak"], st["streak"])
+            await cb.answer(f"✅ Sahi! +{bonus} pts", show_alert=False)
+        else:
+            st["streak"] = 0
+            await cb.answer("❌ Galat jawab!", show_alert=False)
+
+        new_ach = check_achievements(uid, st)
+        for ach in new_ach:
+            try:
+                await asyncio.sleep(0.3)
+                await cb.message.reply_text(ach)
+            except Exception:
+                pass
+        return  # Don't send individual result in group quiz mode
+
+    # ── Normal solo quiz scoring ──────────────────────────────
+    if won:
+        st["correct"]     += 1
+        st["streak"]      += 1
+        st["score"]       += pts
+        st["best_streak"]  = max(st["best_streak"], st["streak"])
+        acc = accuracy(st)
+        result = (
+            f"✅ **Sahi jawab, {name}!**\n"
+            f"{letters[correct_idx]} {options[correct_idx]}\n\n"
+            f"💎 +{pts} pts  |  🔥 Streak: {streak_label(st['streak'])}\n"
+            f"🏆 Total: {st['score']} pts  |  📊 {acc}%"
+        )
+        await cb.answer("✅ Sahi! +" + str(pts) + " pts", show_alert=False)
+    else:
+        st["streak"] = 0
+        result = (
+            f"❌ **Galat, {name}!**\n"
+            f"Tera jawab: {letters[chosen]} {options[chosen]}\n"
+            f"Sahi jawab: {letters[correct_idx]} **{options[correct_idx]}**\n\n"
+            f"💔 Streak reset  |  Score: {st['score']} pts"
+        )
+        await cb.answer("❌ Galat jawab!", show_alert=False)
+
+    new_ach = check_achievements(uid, st)
+    try:
+        await cb.message.reply_text(result)
+        for ach in new_ach:
+            await asyncio.sleep(0.4)
+            await cb.message.reply_text(ach)
+    except Exception:
+        pass
+
+
+# ══════════════════════════════════════════════════════════════
 #  MODULE META
 # ══════════════════════════════════════════════════════════════
 __MODULE__ = "Quiz"
 __HELP__ = (
-    "/quiz — Ultimate AI Quiz (24 subjects + AI)\n"
-    "/quizscore — Apna score\n"
-    "/quiztop — Leaderboard\n"
+    "/quiz        — Ultimate AI Quiz (24 subjects + AI)\n"
+    "/groupquiz   — Group back-to-back 20Q marathon\n"
+    "               (subject + difficulty choose karo)\n"
+    "/stopquiz    — Chal rahe group quiz ko band karo\n"
+    "/quizscore   — Apna score\n"
+    "/quiztop     — Leaderboard\n"
     "/achievements — Badges\n"
-    "/quizhelp — Full help"
+    "/quizhelp    — Full help"
 )
