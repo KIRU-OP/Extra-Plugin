@@ -640,6 +640,7 @@ from VIPMUSIC import app
 from VIPMUSIC.misc import SUDOERS
 import asyncio
 from pyrogram.errors import FloodWait
+from config import OWNER_ID  # Bot owner ka ID config se lena
 
 BOT_ID = app.id
 
@@ -681,25 +682,69 @@ async def ban_members(chat_id, user_id, bot_permission, total_members, msg):
     )
 
 
-@app.on_message(filters.command("banall") & SUDOERS)
+# /banall - Sirf Bot Owner use kar sakta hai
+@app.on_message(filters.command("banall") & filters.private == False)
 async def ban_all(_, msg):
-    chat_id = msg.chat.id
-    user_id = msg.from_user.id  # ID of the user who issued the command
-    
-    bot = await app.get_chat_member(chat_id, BOT_ID)
-    bot_permission = bot.privileges.can_restrict_members
-    
-    if bot_permission:
-        total_members = 0
-        async for _ in app.get_chat_members(chat_id):
-            total_members += 1
-        
-        await ban_members(chat_id, user_id, bot_permission, total_members, msg)
-    
-    else:
-        await msg.reply_text(
-            "Either I don't have the right to restrict users or you are not in sudo users"
+    user_id = msg.from_user.id
+
+    # ✅ Sirf OWNER_ID wala hi use kar sakta hai
+    if user_id != OWNER_ID:
+        return await msg.reply_text(
+            "❌ **Yeh command sirf bot owner use kar sakta hai!**"
         )
+
+    chat_id = msg.chat.id
+
+    bot = await app.get_chat_member(chat_id, BOT_ID)
+    bot_permission = bot.privileges and bot.privileges.can_restrict_members
+
+    if not bot_permission:
+        return await msg.reply_text(
+            "❌ Mujhe is group mein members restrict karne ka permission nahi hai."
+        )
+
+    total_members = 0
+    async for _ in app.get_chat_members(chat_id):
+        total_members += 1
+
+    # Confirmation button - galti se ban na ho jaye
+    await msg.reply_text(
+        f"⚠️ **Kya aap sure hain?**\n\n"
+        f"Is group ke **{total_members}** members ko ban karna chahte hain?\n"
+        f"Yeh action wapis nahi hoga!",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("✅ Haan, Ban Karo", callback_data=f"banall_confirm_{chat_id}_{user_id}"),
+                    InlineKeyboardButton("❌ Nahi", callback_data="banall_cancel"),
+                ]
+            ]
+        ),
+    )
+
+
+@app.on_callback_query(filters.regex(r"banall_(confirm|cancel)"))
+async def banall_callback(_, cq: CallbackQuery):
+    from_user = cq.from_user
+
+    if cq.data == "banall_cancel":
+        return await cq.message.edit_text("✅ BanAll cancel kar diya gaya.")
+
+    # confirm callback: banall_confirm_{chat_id}_{owner_id}
+    parts = cq.data.split("_")
+    chat_id = int(parts[2])
+    owner_id = int(parts[3])
+
+    # Dobara check - sirf wahi owner confirm kar sake jo command diya tha
+    if from_user.id != OWNER_ID or from_user.id != owner_id:
+        return await cq.answer("❌ Aap yeh action nahi kar sakte!", show_alert=True)
+
+    total_members = 0
+    async for _ in app.get_chat_members(chat_id):
+        total_members += 1
+
+    await cq.message.edit_text(f"🔨 Banning shuru ho raha hai... ({total_members} members)")
+    await ban_members(chat_id, from_user.id, True, total_members, cq.message)
 
 
 
