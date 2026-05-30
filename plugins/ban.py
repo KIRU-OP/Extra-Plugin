@@ -3,6 +3,7 @@ from contextlib import suppress
 
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter, ChatMemberStatus, ChatType
+from pyrogram.errors import FloodWait, UserNotParticipant, ChatAdminRequired, InviteHashExpired
 from pyrogram.types import (
     CallbackQuery,
     ChatPermissions,
@@ -26,7 +27,7 @@ from VIPMUSIC.utils.functions import (
     time_converter,
 )
 from utils.permissions import adminsOnly, member_permissions
-from config import BANNED_USERS, OWNER_ID
+from config import BANNED_USERS
 
 warnsdb = mongodb.warns
 
@@ -635,117 +636,77 @@ async def check_warns(_, message: Message):
     return await message.reply_text(f"{mention} ʜᴀs {warns}/3 ᴡᴀʀɴɪɴɢs")
 
 
+from pyrogram.errors import FloodWait
+
 BOT_ID = app.id
 
-async def ban_members(chat_id, user_id, bot_permission, total_members, msg):
+async def ban_members(chat_id, issuer_id, members, msg):
+    """
+    Ban all members except the issuer and SUDOERS.
+    - Members list is pre-fetched once (no repeated API calls).
+    - FloodWait is respected with e.value (Pyrogram v2+).
+    - Progress edit every 20 bans to reduce API spam.
+    - Stops after 30 consecutive failures.
+    """
     banned_count = 0
     failed_count = 0
-    ok = await msg.reply_text(
-        f"Total members found: {total_members}\n**Started Banning..**"
-    )
-    
-    while failed_count <= 30:
-        async for member in app.get_chat_members(chat_id):
-            if failed_count > 30:
-                break  # Stop if failed bans exceed 30
-            
-            try:
-                if member.user.id != user_id and member.user.id not in SUDOERS:
-                    await app.ban_chat_member(chat_id, member.user.id)
-                    banned_count += 1
+    total = len(members)
 
-                    if banned_count % 5 == 0:
-                        try:
-                            await ok.edit_text(
-                                f"Banned {banned_count} members out of {total_members}"
-                            )
-                        except Exception:
-                            pass  # Ignore if edit fails
+    ok = await msg.reply_text(f"👥 Total members: **{total}**\n⏳ **Banning started...**")
 
-            except FloodWait as e:
-                await asyncio.sleep(e.x)  # Wait for the flood time and continue
-            except Exception:
-                failed_count += 1
+    for member in members:
+        uid = member.user.id if member.user else None
+        if not uid or uid == issuer_id or uid in SUDOERS:
+            continue
 
-        if failed_count <= 30:
-            await asyncio.sleep(5)  # Retry every 5 seconds if failed bans are within the limit
-    
+        try:
+            await app.ban_chat_member(chat_id, uid)
+            banned_count += 1
+            failed_count = 0  # reset streak on success
+
+            if banned_count % 20 == 0:
+                with suppress(Exception):
+                    await ok.edit_text(
+                        f"✅ Banned **{banned_count}** / **{total}** members"
+                    )
+
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+            # Retry the same user after flood wait
+            with suppress(Exception):
+                await app.ban_chat_member(chat_id, uid)
+                banned_count += 1
+        except Exception:
+            failed_count += 1
+            if failed_count >= 30:
+                break
+
     await ok.edit_text(
-        f"Total banned: {banned_count}\nFailed bans: {failed_count}\nStopped as failed bans exceeded limit."
+        f"🚫 **Ban All Complete**\n"
+        f"✅ Banned: **{banned_count}**\n"
+        f"❌ Failed: **{failed_count}**"
     )
 
 
-# /banall - Sirf Bot Owner use kar sakta hai
-@app.on_message(filters.command("banall") & filters.private == False)
+@app.on_message(filters.command("banall") & SUDOERS)
 async def ban_all(_, msg):
-    user_id = msg.from_user.id
-
-    # ✅ Sirf OWNER_ID wala hi use kar sakta hai
-    if user_id != OWNER_ID:
-        return await msg.reply_text(
-            "❌ **Yeh command sirf bot owner use kar sakta hai!**"
-        )
-
     chat_id = msg.chat.id
+    issuer_id = msg.from_user.id
 
     bot = await app.get_chat_member(chat_id, BOT_ID)
-    bot_permission = bot.privileges and bot.privileges.can_restrict_members
-
-    if not bot_permission:
+    if not (bot.privileges and bot.privileges.can_restrict_members):
         return await msg.reply_text(
-            "❌ Mujhe is group mein members restrict karne ka permission nahi hai."
+            "❌ I don't have **restrict members** permission in this chat."
         )
 
-    total_members = 0
-    async for _ in app.get_chat_members(chat_id):
-        total_members += 1
+    # Fetch entire member list ONCE — avoids repeated get_chat_members calls inside loop
+    fetching = await msg.reply_text("⏳ Fetching members list...")
+    members = [m async for m in app.get_chat_members(chat_id)]
+    await fetching.delete()
 
-    # Confirmation button - galti se ban na ho jaye
-    await msg.reply_text(
-        f"⚠️ **Kya aap sure hain?**\n\n"
-        f"Is group ke **{total_members}** members ko ban karna chahte hain?\n"
-        f"Yeh action wapis nahi hoga!",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("✅ Haan, Ban Karo", callback_data=f"banall_confirm_{chat_id}_{user_id}"),
-                    InlineKeyboardButton("❌ Nahi", callback_data="banall_cancel"),
-                ]
-            ]
-        ),
-    )
+    await ban_members(chat_id, issuer_id, members, msg)
 
 
-@app.on_callback_query(filters.regex(r"banall_(confirm|cancel)"))
-async def banall_callback(_, cq: CallbackQuery):
-    from_user = cq.from_user
-
-    if cq.data == "banall_cancel":
-        return await cq.message.edit_text("✅ BanAll cancel kar diya gaya.")
-
-    # confirm callback: banall_confirm_{chat_id}_{owner_id}
-    parts = cq.data.split("_")
-    chat_id = int(parts[2])
-    owner_id = int(parts[3])
-
-    # Dobara check - sirf wahi owner confirm kar sake jo command diya tha
-    if from_user.id != OWNER_ID or from_user.id != owner_id:
-        return await cq.answer("❌ Aap yeh action nahi kar sakte!", show_alert=True)
-
-    total_members = 0
-    async for _ in app.get_chat_members(chat_id):
-        total_members += 1
-
-    await cq.message.edit_text(f"🔨 Banning shuru ho raha hai... ({total_members} members)")
-    await ban_members(chat_id, from_user.id, True, total_members, cq.message)
-
-
-
-from pyrogram import Client, filters
-from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAlreadyParticipant, InviteHashExpired
-
-# Create a bot instance
-from VIPMUSIC import app 
 
 @app.on_message(filters.command("unbanme"))
 async def unbanme(client, message):
