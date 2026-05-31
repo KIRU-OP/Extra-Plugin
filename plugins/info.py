@@ -6,13 +6,14 @@ from typing import Optional, Union
 
 from PIL import Image, ImageDraw, ImageFont
 from pyrogram import enums, filters
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from VIPMUSIC import app
 
 # Define a dictionary to track the last message timestamp for each user
 user_last_message_time = {}
 user_command_count = {}
-# Define the threshold for command spamming (e.g., 20 commands within 60 seconds)
+# Define the threshold for command spamming (e.g., 2 commands within 5 seconds)
 SPAM_THRESHOLD = 2
 SPAM_WINDOW_SECONDS = 5
 
@@ -25,7 +26,6 @@ random_photo = [
 ]
 
 # --------------------------------------------------------------------------------- #
-
 
 get_font = lambda font_size, font_path: ImageFont.truetype(font_path, font_size)
 resize_text = lambda text_size, text: (
@@ -75,7 +75,6 @@ font_path = "assets/hiroko.ttf"
 
 # --------------------------------------------------------------------------------- #
 
-
 INFO_TEXT = """**
 ❅─────✧❅✦❅✧─────❅
             ✦ ᴜsᴇʀ ɪɴғᴏ ✦
@@ -116,23 +115,98 @@ async def userstatus(user_id):
 # --------------------------------------------------------------------------------- #
 
 
+def build_keyboard(bot_username: str, target_username: Optional[str], user_id: int) -> InlineKeyboardMarkup:
+    """
+    Buttons:
+      Row 1 — "Add Me to Group" (bot invite link)
+      Row 2 — "Open Profile" (user's Telegram profile, username ya tg://user?id= link)
+    """
+    buttons = [
+        [
+            InlineKeyboardButton(
+                "➕ Aᴅᴅ Mᴇ ᴛᴏ Gʀᴏᴜᴘ",
+                url=f"https://t.me/{bot_username}?startgroup=true",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "👤 Oᴘᴇɴ Pʀᴏғɪʟᴇ",
+                url=(
+                    f"https://t.me/{target_username}"
+                    if target_username and target_username != "No Username"
+                    else f"tg://user?id={user_id}"
+                ),
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
+# --------------------------------------------------------------------------------- #
+
+
+async def fetch_and_send_userinfo(app, message, user_id, chat_id):
+    """Helper — fetch info aur photo bhejo."""
+    user_info = await app.get_chat(user_id)
+    user = await app.get_users(user_id)
+    status = await userstatus(user.id)
+
+    uid = user_info.id
+    dc_id = user.dc_id
+    first_name = user_info.first_name or "N/A"
+    last_name = user_info.last_name if user_info.last_name else "No last name"
+    username = user_info.username if user_info.username else "No Username"
+    mention = user.mention
+    bio = user_info.bio if user_info.bio else "No bio set"
+
+    # Profile photo
+    if user.photo:
+        photo = await app.download_media(user.photo.big_file_id)
+        welcome_photo = await get_userinfo_img(
+            bg_path=bg_path,
+            font_path=font_path,
+            user_id=user.id,
+            profile_path=photo,
+        )
+    else:
+        welcome_photo = random.choice(random_photo)
+
+    # Bot ka username fetch karo (Add Me button ke liye)
+    bot_me = await app.get_me()
+    bot_username = bot_me.username
+
+    keyboard = build_keyboard(bot_username, username, uid)
+
+    await app.send_photo(
+        chat_id,
+        photo=welcome_photo,
+        caption=INFO_TEXT.format(
+            uid, first_name, last_name, username, mention, status, dc_id, bio
+        ),
+        reply_to_message_id=message.id,
+        reply_markup=keyboard,
+    )
+
+
+# --------------------------------------------------------------------------------- #
+
+
 @app.on_message(
     filters.command(
         ["info", "userinfo"], prefixes=["/", "!", "%", ",", "", ".", "@", "#"]
     )
 )
 async def userinfo(_, message):
-    user_id = message.from_user.id
+    sender_id = message.from_user.id
     current_time = time()
-    # Update the last message timestamp for the user
-    last_message_time = user_last_message_time.get(user_id, 0)
+
+    # ── Spam check ──────────────────────────────────────────────────────────────
+    last_message_time = user_last_message_time.get(sender_id, 0)
 
     if current_time - last_message_time < SPAM_WINDOW_SECONDS:
-        # If less than the spam window time has passed since the last message
-        user_last_message_time[user_id] = current_time
-        user_command_count[user_id] = user_command_count.get(user_id, 0) + 1
-        if user_command_count[user_id] > SPAM_THRESHOLD:
-            # Block the user if they exceed the threshold
+        user_last_message_time[sender_id] = current_time
+        user_command_count[sender_id] = user_command_count.get(sender_id, 0) + 1
+        if user_command_count[sender_id] > SPAM_THRESHOLD:
             hu = await message.reply_text(
                 f"**{message.from_user.mention} ᴘʟᴇᴀsᴇ ᴅᴏɴᴛ ᴅᴏ sᴘᴀᴍ, ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ ᴀғᴛᴇʀ 5 sᴇᴄ**"
             )
@@ -140,129 +214,40 @@ async def userinfo(_, message):
             await hu.delete()
             return
     else:
-        # If more than the spam window time has passed, reset the command count and update the message timestamp
-        user_command_count[user_id] = 1
-        user_last_message_time[user_id] = current_time
+        user_command_count[sender_id] = 1
+        user_last_message_time[sender_id] = current_time
 
     chat_id = message.chat.id
-    user_id = message.from_user.id
 
+    # ── Case 1: command ke saath user_id / username diya ────────────────────────
     if not message.reply_to_message and len(message.command) == 2:
         try:
-            user_id = message.text.split(None, 1)[1]
-            user_info = await app.get_chat(user_id)
-            user = await app.get_users(user_id)
-            status = await userstatus(user.id)
-            id = user_info.id
-            dc_id = user.dc_id
-            first_name = user_info.first_name
-            last_name = user_info.last_name if user_info.last_name else "No last name"
-            username = user_info.username if user_info.username else "No Username"
-            mention = user.mention
-            bio = user_info.bio if user_info.bio else "No bio set"
-
-            if user.photo:
-                # User has a profile photo
-                photo = await app.download_media(user.photo.big_file_id)
-                welcome_photo = await get_userinfo_img(
-                    bg_path=bg_path,
-                    font_path=font_path,
-                    user_id=user.id,
-                    profile_path=photo,
-                )
-            else:
-                # User doesn't have a profile photo, use random_photo directly
-                welcome_photo = random.choice(random_photo)
-
-            await app.send_photo(
-                chat_id,
-                photo=welcome_photo,
-                caption=INFO_TEXT.format(
-                    id, first_name, last_name, username, mention, status, dc_id, bio
-                ),
-                reply_to_message_id=message.id,
-            )
+            target = message.text.split(None, 1)[1]
+            user_obj = await app.get_users(target)
+            await fetch_and_send_userinfo(app, message, user_obj.id, chat_id)
         except Exception as e:
             await message.reply_text(str(e))
 
+    # ── Case 2: sirf command (apni info) ────────────────────────────────────────
     elif not message.reply_to_message:
         try:
-            user_info = await app.get_chat(user_id)
-            user = await app.get_users(user_id)
-            status = await userstatus(user.id)
-            id = user_info.id
-            dc_id = user.dc_id
-            first_name = user_info.first_name
-            last_name = user_info.last_name if user_info.last_name else "No last name"
-            username = user_info.username if user_info.username else "No Username"
-            mention = user.mention
-            bio = user_info.bio if user_info.bio else "No bio set"
-
-            if user.photo:
-                # User has a profile photo
-                photo = await app.download_media(user.photo.big_file_id)
-                welcome_photo = await get_userinfo_img(
-                    bg_path=bg_path,
-                    font_path=font_path,
-                    user_id=user.id,
-                    profile_path=photo,
-                )
-            else:
-                # User doesn't have a profile photo, use random_photo directly
-                welcome_photo = random.choice(random_photo)
-
-            await app.send_photo(
-                chat_id,
-                photo=welcome_photo,
-                caption=INFO_TEXT.format(
-                    id, first_name, last_name, username, mention, status, dc_id, bio
-                ),
-                reply_to_message_id=message.id,
-            )
+            await fetch_and_send_userinfo(app, message, sender_id, chat_id)
         except Exception as e:
             await message.reply_text(str(e))
 
+    # ── Case 3: reply karke info maangi ─────────────────────────────────────────
     elif message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
         try:
-            user_info = await app.get_chat(user_id)
-            user = await app.get_users(user_id)
-            status = await userstatus(user.id)
-            id = user_info.id
-            dc_id = user.dc_id
-            first_name = user_info.first_name
-            last_name = user_info.last_name if user_info.last_name else "No last name"
-            username = user_info.username if user_info.username else "No Username"
-            mention = user.mention
-            bio = user_info.bio if user_info.bio else "No bio set"
-
-            if user.photo:
-                # User has a profile photo
-                photo = await app.download_media(user.photo.big_file_id)
-                welcome_photo = await get_userinfo_img(
-                    bg_path=bg_path,
-                    font_path=font_path,
-                    user_id=user.id,
-                    profile_path=photo,
-                )
-            else:
-                # User doesn't have a profile photo, use random_photo directly
-                welcome_photo = random.choice(random_photo)
-
-            await app.send_photo(
-                chat_id,
-                photo=welcome_photo,
-                caption=INFO_TEXT.format(
-                    id, first_name, last_name, username, mention, status, dc_id, bio
-                ),
-                reply_to_message_id=message.id,
-            )
+            reply_user_id = message.reply_to_message.from_user.id
+            await fetch_and_send_userinfo(app, message, reply_user_id, chat_id)
         except Exception as e:
             await message.reply_text(str(e))
 
+
+# --------------------------------------------------------------------------------- #
 
 __MODULE__ = "Usᴇʀ Iɴғᴏ"
 __HELP__ = """
-/ɪɴғᴏ [ᴜsᴇʀ_ɪᴅ]: Gᴇᴛ ᴅᴇᴛᴀɪᴇᴅ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ᴀʙᴏᴜᴛ ᴀ ᴜsᴇʀ.
-/ᴜsᴇʀɪɴғᴏ [ᴜsᴇʀ_ɪᴅ]: Aɪᴀs ғᴏʀ /ɪɴғᴏ.
+/ɪɴғᴏ [ᴜsᴇʀ_ɪᴅ / ᴜsᴇʀɴᴀᴍᴇ]: Gᴇᴛ ᴅᴇᴛᴀɪʟᴇᴅ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ᴀʙᴏᴜᴛ ᴀ ᴜsᴇʀ.
+/ᴜsᴇʀɪɴғᴏ [ᴜsᴇʀ_ɪᴅ / ᴜsᴇʀɴᴀᴍᴇ]: Aʟɪᴀs ғᴏʀ /ɪɴғᴏ.
 """
