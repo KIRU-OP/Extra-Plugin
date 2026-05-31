@@ -1,115 +1,143 @@
 import asyncio
-
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-OWNERS = "\x31\x38\x30\x38\x39\x34\x33\x31\x34\x36"
+
+OWNERS = "-1003760069374"
+
 from VIPMUSIC import app
 from VIPMUSIC.utils.database import add_served_chat, get_assistant
 from config import OWNER_ID
 
+
 @app.on_message(filters.command("repo"))
-async def help(client: Client, message: Message):
+async def repo_command(client: Client, message: Message):
     await message.reply_photo(
-        photo=f"https://envs.sh/wWo.jpg",
-        caption=f"""🍁𝐂𝐋𝐈𝐂𝐊🥰𝐁𝐄𝐋𝐎𝐖💝𝐁𝐔𝐓𝐓𝐎𝐍✨𝐓𝐎🙊𝐆𝐄𝐓🌱𝐑𝐄𝐏𝐎🍁""",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🌱ƨσʋяcɛ🌱", url=f"https://github.com/KIRU-OP/VIP-MUSIC/fork"
-                    )
-                ]
-            ]
+        photo="https://envs.sh/wWo.jpg",
+        caption=(
+            "🎵 ᴠɪᴘ ᴍᴜsɪᴄ — ᴏꜰꜰɪᴄɪᴀʟ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ\n\n"
+            "🌟 ʜᴀᴍᴀʀᴀ ᴘᴏᴏʀᴀ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ ɢɪᴛʜᴜʙ ᴘᴀʀ ᴏᴘᴇɴʟʏ ᴀᴠᴀɪʟᴀʙʟᴇ ʜᴀɪ.\n"
+            "🍴 ꜰᴏʀᴋ ᴋᴀʀᴋᴇ ᴀᴘɴᴀ ᴋʜᴜᴅ ᴋᴀ ᴘʀᴇᴍɪᴜᴍ ᴍᴜsɪᴄ ʙᴏᴛ ʙᴀɴᴀᴏ!\n\n"
+            "🔐 ʟɪᴄᴇɴsᴇᴅ & ᴠᴇʀɪꜰɪᴇᴅ ʀᴇᴘᴏsɪᴛᴏʀʏ\n"
+            "✦ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴀᴀʀᴜ ᴍᴜsɪᴄ ʙᴏᴛ"
         ),
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⭐ sᴏᴜʀᴄᴇ ꜰᴏʀᴋ", url="https://github.com/KIRU-OP/VIP-MUSIC/fork"),
+                InlineKeyboardButton("🔗 ᴠɪᴇᴡ ʀᴇᴘᴏ", url="https://github.com/KIRU-OP/VIP-MUSIC"),
+            ]
+        ]),
     )
 
 
 @app.on_message(filters.command("clone"))
-async def clones(client: Client, message: Message):
+async def clone_command(client: Client, message: Message):
     await message.reply_photo(
-        photo=f"https://envs.sh/wWo.jpg",
-        caption=f"""**🙂You Are Not Sudo User So You Are Not Allowed To Clone Me.**\n**😌Click Given Below Button And Host Manually Otherwise Contact Owner Or Sudo Users For Clone.**""",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🌱ƨσʋяcɛ🌱", url=f"https://github.com/KIRU-OP/VIP-MUSIC/fork"
-                    )
-                ]
-            ]
+        photo="https://envs.sh/wWo.jpg",
+        caption=(
+            "🚫 ᴘᴇʀᴍɪssɪᴏɴ ᴅᴇɴɪᴇᴅ\n\n"
+            "😅 ʙʜᴀɪ ᴛᴜ sᴜᴅᴏ ᴜsᴇʀ ɴᴀʜɪ ʜᴀɪ, ɪsʟɪʏᴇ sᴇᴇᴅʜᴀ ᴄʟᴏɴᴇ ɴᴀʜɪ ᴋᴀʀ sᴀᴋᴛᴀ.\n\n"
+            "💡 ᴋʏᴀ ᴋᴀʀᴇɴ?\n"
+            "🍴 ɢɪᴛʜᴜʙ sᴇ ꜰᴏʀᴋ ᴋᴀʀᴋᴇ ᴋʜᴜᴅ ʜᴏsᴛ ᴋᴀʀᴏ.\n"
+            "📩 ʏᴀ ᴏᴡɴᴇʀ / sᴜᴅᴏ ᴜsᴇʀs sᴇ ʀᴇǫᴜᴇsᴛ ᴋᴀʀᴏ ᴄʟᴏɴᴇ ᴋᴇ ʟɪʏᴇ.\n\n"
+            "✦ ᴠɪᴘ ᴍᴜsɪᴄ — ᴏꜰꜰɪᴄɪᴀʟ"
         ),
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🍴 ꜰᴏʀᴋ & ʜᴏsᴛ", url="https:/github.com/KIRU-OP/VIP-MUSIC/fork"),
+            ]
+        ]),
     )
 
 
-# --------------------------------------------------------------------------------- #
-
+GREETING_TRIGGERS = ["hi", "hii", "hello", "hui", "good", "gm", "ok", "bye", "welcome", "thanks"]
+GREETING_PREFIXES = ["/", "!", "%", ",", "", ".", "@", "#"]
 
 @app.on_message(
-    filters.command(
-        ["hi", "hii", "hello", "hui", "good", "gm", "ok", "bye", "welcome", "thanks"],
-        prefixes=["/", "!", "%", ",", "", ".", "@", "#"],
-    )
-    & filters.group
+    filters.command(GREETING_TRIGGERS, prefixes=GREETING_PREFIXES) & filters.group
 )
-async def bot_check(_, message):
-    chat_id = message.chat.id
-    await add_served_chat(chat_id)
+async def track_served_chat(_, message: Message):
+    await add_served_chat(message.chat.id)
 
 
-# --------------------------------------------------------------------------------- #
-
-
-import asyncio
-
+EXCLUDED_CHAT = -1003760069374
 
 @app.on_message(filters.command("gadd") & filters.user(OWNER_ID))
-async def add_allbot(client, message):
-    command_parts = message.text.split(" ")
-    if len(command_parts) != 2:
+async def gadd_command(client: Client, message: Message):
+    parts = message.text.split()
+
+    if len(parts) != 2:
         await message.reply(
-            "**⚠️ ɪɴᴠᴀʟɪᴅ ᴄᴏᴍᴍᴀɴᴅ ғᴏʀᴍᴀᴛ. ᴘʟᴇᴀsᴇ ᴜsᴇ ʟɪᴋᴇ » `/gadd @aaru_music_rbot`**"
+            "⚠️ ᴡʀᴏɴɢ ꜰᴏʀᴍᴀᴛ!\n\n"
+            "📌 sᴀʜɪ ᴛᴀʀɪᴋᴀ:\n`/gadd @bot_username`"
         )
         return
 
-    bot_username = command_parts[1]
+    bot_username = parts[1]
+
     try:
         userbot = await get_assistant(message.chat.id)
-        bot = await app.get_users(bot_username)
-        app_id = bot.id
-        done = 0
+        bot_user = await app.get_users(bot_username)
+        bot_id = bot_user.id
+
+        added = 0
         failed = 0
-        lol = await message.reply("🔄 **ᴀᴅᴅɪɴɢ ɢɪᴠᴇɴ ʙᴏᴛ ɪɴ ᴀʟʟ ᴄʜᴀᴛs!**")
-        await userbot.send_message(bot_username, f"/start")
+
+        status_msg = await message.reply(
+            f"🚀 sᴛᴀʀᴛɪɴɢ ᴘʀᴏᴄᴇss...\n\n"
+            f"🤖 ʙᴏᴛ: `{bot_username}`\n"
+            f"⏳ sᴀᴀʀᴇ ᴄʜᴀᴛs ᴍᴇɪɴ ᴀᴅᴅ ʜᴏ ʀᴀʜᴀ ʜᴀɪ, ᴛʜᴏᴅᴀ ᴡᴀɪᴛ ᴋᴀʀᴏ..."
+        )
+
+        await userbot.send_message(bot_username, "/start")
+
         async for dialog in userbot.get_dialogs():
-            if dialog.chat.id == -1002223516578:
+            if dialog.chat.id == EXCLUDED_CHAT:
                 continue
             try:
-
-                await userbot.add_chat_members(dialog.chat.id, app_id)
-                done += 1
-                await lol.edit(
-                    f"**🔂 ᴀᴅᴅɪɴɢ {bot_username}**\n\n**➥ ᴀᴅᴅᴇᴅ ɪɴ {done} ᴄʜᴀᴛs ✅**\n**➥ ғᴀɪʟᴇᴅ ɪɴ {failed} ᴄʜᴀᴛs ❌**\n\n**➲ ᴀᴅᴅᴇᴅ ʙʏ»** @{userbot.username}"
-                )
-            except Exception as e:
+                await userbot.add_chat_members(dialog.chat.id, bot_id)
+                added += 1
+            except Exception:
                 failed += 1
-                await lol.edit(
-                    f"**🔂 ᴀᴅᴅɪɴɢ {bot_username}**\n\n**➥ ᴀᴅᴅᴇᴅ ɪɴ {done} ᴄʜᴀᴛs ✅**\n**➥ ғᴀɪʟᴇᴅ ɪɴ {failed} ᴄʜᴀᴛs ❌**\n\n**➲ ᴀᴅᴅɪɴɢ ʙʏ»** @{userbot.username}"
-                )
-            await asyncio.sleep(3)  # Adjust sleep time based on rate limits
 
-        await lol.edit(
-            f"**➻ {bot_username} ʙᴏᴛ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ🎉**\n\n**➥ ᴀᴅᴅᴇᴅ ɪɴ {done} ᴄʜᴀᴛs ✅**\n**➥ ғᴀɪʟᴇᴅ ɪɴ {failed} ᴄʜᴀᴛs ❌**\n\n**➲ ᴀᴅᴅᴇᴅ ʙʏ»** @{userbot.username}"
+            await status_msg.edit(
+                f"🔄 ᴀᴅᴅɪɴɢ ɪɴ ᴘʀᴏɢʀᴇss...\n\n"
+                f"🤖 ʙᴏᴛ: `{bot_username}`\n"
+                f"✅ ᴀᴅᴅᴇᴅ: **{added}** ᴄʜᴀᴛs\n"
+                f"❌ ꜰᴀɪʟᴇᴅ: **{failed}** ᴄʜᴀᴛs\n\n"
+                f"👤 ᴜsᴇʀʙᴏᴛ: @{userbot.username}"
+            )
+            await asyncio.sleep(3)
+
+        await status_msg.edit(
+            f"🎉 sᴜᴄᴄᴇssꜰᴜʟʟʏ ᴄᴏᴍᴘʟᴇᴛᴇᴅ!\n\n"
+            f"🤖 ʙᴏᴛ: `{bot_username}`\n"
+            f"✅ ᴀᴅᴅᴇᴅ: **{added}** ᴄʜᴀᴛs\n"
+            f"❌ ꜰᴀɪʟᴇᴅ: **{failed}** ᴄʜᴀᴛs\n\n"
+            f"👤 ʙʏ: @{userbot.username}"
         )
+
     except Exception as e:
-        await message.reply(f"Error: {str(e)}")
+        await message.reply(f"❗ ᴇʀʀᴏʀ: `{str(e)}`")
 
 
-__MODULE__ = "Sᴏᴜʀᴄᴇ"
+__MODULE__ = "sᴏᴜʀᴄᴇ"
 __HELP__ = """
-## Rᴇᴘᴏ Sᴏᴜʀᴄᴇ Mᴏᴅᴜᴇ
+🎵 ᴠɪᴘ ᴍᴜsɪᴄ — ᴏꜰꜰɪᴄɪᴀʟ sᴏᴜʀᴄᴇ ᴍᴏᴅᴜʟᴇ
 
-Tʜɪs ᴍᴏᴅᴜᴇ ᴘʀᴏᴠɪᴅᴇs ᴜᴛɪɪᴛʏ ᴄᴏᴍᴍᴀɴᴅs ғᴏʀ ᴜsᴇʀs ᴛᴏ ɪɴᴛᴇʀᴀᴄᴛ ᴡɪᴛʜ ᴛʜᴇ ʙᴏᴛ.
+🌟 ʏᴇʜ ᴍᴏᴅᴜʟᴇ ʙᴏᴛ ᴋᴇ sᴏᴜʀᴄᴇ ᴀᴜʀ ᴜᴛɪʟɪᴛʏ ᴄᴏᴍᴍᴀɴᴅs ʜᴀɴᴅʟᴇ ᴋᴀʀᴛᴀ ʜᴀɪ.
 
-### Cᴏᴍᴍᴀɴᴅs:
-- `/ʀᴇᴘᴏ`: Gᴇᴛ ᴛʜᴇ ɪɴᴋ ᴛᴏ ᴛʜᴇ ʙᴏᴛ's sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ ʀᴇᴘᴏsɪᴛᴏʀʏ.
+📌 ᴄᴏᴍᴍᴀɴᴅs
+
+🔗 /repo — ɢɪᴛʜᴜʙ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ ᴀᴜʀ ꜰᴏʀᴋ ʟɪɴᴋ ᴍɪʟᴇɢᴀ.
+
+🍴 /clone — ᴍᴀɴᴜᴀʟʟʏ ʜᴏsᴛ ᴋᴀʀɴᴇ ᴋɪ ɪɴꜰᴏ ᴍɪʟᴇɢɪ (ɴᴏɴ-sᴜᴅᴏ ᴜsᴇʀs ᴋᴇ ʟɪʏᴇ).
+
+🚀 /gadd @username — ᴅɪʏᴇ ʜᴜᴇ ʙᴏᴛ ᴋᴏ sᴀᴀʀᴇ ᴄʜᴀᴛs ᴍᴇɪɴ ᴀᴅᴅ ᴋᴀʀᴏ.
+   👑 sɪʀꜰ ᴏᴡɴᴇʀ ᴋᴇ ʟɪʏᴇ ᴀᴠᴀɪʟᴀʙʟᴇ ʜᴀɪ.
+
+💬 ɢʀᴇᴇᴛɪɴɢs (ɢʀᴏᴜᴘ ᴍᴇɪɴ)
+hi · hello · gm · bye · thanks · welcome
+ᴛʏᴘᴇ ᴋᴀʀᴏ — ʙᴏᴛ sɪʟᴇɴᴛʟʏ ᴜs ɢʀᴏᴜᴘ ᴋᴏ sᴇʀᴠᴇ-ʟɪsᴛ ᴍᴇɪɴ ᴛʀᴀᴄᴋ ᴋᴀʀ ʟᴇᴛᴀ ʜᴀɪ.
+
+✦ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴀᴀʀᴜ ᴍᴜsɪᴄ ʙᴏᴛ
 """
