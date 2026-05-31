@@ -124,13 +124,13 @@ def build_keyboard(bot_username: str, target_username: Optional[str], user_id: i
     buttons = [
         [
             InlineKeyboardButton(
-                "➕ Aᴅᴅ Mᴇ ᴛᴏ Gʀᴏᴜᴘ",
+                "➕ ᴀʙʙ ᴍᴇ ᴛᴏ ɢʀᴏᴜᴘ",
                 url=f"https://t.me/{bot_username}?startgroup=true",
             )
         ],
         [
             InlineKeyboardButton(
-                "👤 Oᴘᴇɴ Pʀᴏғɪʟᴇ",
+                "👤 ᴏᴘᴇɴ ᴘʀᴏғɪʟᴇ",
                 url=(
                     f"https://t.me/{target_username}"
                     if target_username and target_username != "No Username"
