@@ -25,7 +25,7 @@ MESSAGE = """**
 
 🔐ᴜꜱᴇ » [/start](https://t.me/aaru_music_rbot?start=help) ᴛᴏ ᴄʜᴇᴄᴋ ʙᴏᴛ
 
-➲ ʙᴏᴛ :** @{app.username}"""
+➲ ʙᴏᴛ :**[ᴀᴀʀᴜ ꭙ ᴍᴜsɪᴄ ♡゙](https://t.me/aaru_music_rbot?start=help)"""
 
 BUTTON = InlineKeyboardMarkup(
     [
