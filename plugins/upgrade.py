@@ -905,5 +905,5 @@ async def set_website_cmd(_, message: Message):
 
 
 # ─── MODULE META ───────────────────────────────────────────────────────────────
-__MODULE__ = "Upgrade"
+__MODULE__ = "upgrade"
 __HELP__ = HELP_TEXT
