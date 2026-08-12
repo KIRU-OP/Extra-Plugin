@@ -8,9 +8,48 @@ from VIPMUSIC import LOGGER
 from pyrogram.types import Message
 from VIPMUSIC.misc import SUDOERS
 from VIPMUSIC import app
-from VIPMUSIC.utils.database import *
+from motor.motor_asyncio import AsyncIOMotorClient
 
 LOGGER = getLogger(__name__)
+
+# ---------------------------------------------------------------------
+# Self-contained Mongo connection for this plugin (welcome on/off state)
+# ---------------------------------------------------------------------
+def _get_mongo_uri():
+    # Try to read the URI from config.py first (common variable names)
+    try:
+        import config
+        for name in ("MONGO_DB_URI", "DATABASE_URL", "MONGODB_URI", "MONGO_URI"):
+            uri = getattr(config, name, None)
+            if uri:
+                return uri
+    except Exception as e:
+        LOGGER.warning(f"Could not import config.py: {e}")
+
+    # Fallback: check environment variables directly
+    for name in ("MONGO_DB_URI", "DATABASE_URL", "MONGODB_URI", "MONGO_URI"):
+        uri = os.environ.get(name)
+        if uri:
+            return uri
+
+    raise RuntimeError(
+        "MongoDB URI not found. Set MONGO_DB_URI (or DATABASE_URL) in config.py or as an env variable."
+    )
+
+
+_mongo_client = AsyncIOMotorClient(_get_mongo_uri())
+_wdb = _mongo_client["VIPMUSIC"]  # change db name here if your bot uses a different one
+wlcm = _wdb["welcome"]
+
+
+async def add_wlcm(chat_id: int):
+    return await wlcm.update_one(
+        {"chat_id": chat_id}, {"$set": {"chat_id": chat_id}}, upsert=True
+    )
+
+
+async def rm_wlcm(chat_id: int):
+    return await wlcm.delete_one({"chat_id": chat_id})
 
 __MODULE__ = "welcome"
 __HELP__ = """
